@@ -111,10 +111,39 @@
 | **IWSR** | Tržní a spotřebitelská data ze 160+ trhů podle kategorie, kanálu a cenového segmentu, plus data o inovacích. | Předplatné, na dotaz | Mezinárodní výrobci a dovozci lihovin | Pravděpodobně drahé pro střední firmu. Granularita pro ČR neověřena. Nesleduje promo ceny řetězců ani zalistování SKU. | [theiwsr.com](https://theiwsr.com/) |
 | **NIQ** | Tři zdarma reporty o trendech kategorie a značek, srovnání konkurentů (prodeje, ceny, distribuce, promo) a týdenní upozornění. | Základ zdarma, placené reporty na dotaz | Dodavatelé alkoholu, silně zaměřeno na USA | Pokrytí ČR pravděpodobně chybí. Pro české řetězce nepoužitelný, dokud NIQ nepotvrdí opak. | [Stránka NIQ](https://nielseniq.com/global/en/events/2023/niq-discus/) |
 | **DataWeave** | Počítačové vidění čte promo z letáků, banerů a výpisů, vytahuje ceny, slevy, podmínky a značky a měří share of media. | Na dotaz (demo) | Značky, řetězce, agentury | Globální, bez potvrzeného pokrytí ČR a lihovin. Pravděpodobně drahé a bez lokální podpory. | [Flyers & Promo](https://dataweave.com/us/flyers-promo-intelligence) |
-| **Ipsos Promo Tracker** | AI automaticky zpracovává akční letáky, identifikuje produkty podle EAN a získává informace o cenách a promo akcích. Výstupy lze přizpůsobit a propojit s interními systémy přes API. | Na vyžádání (demo) | Výrobci FMCG a maloobchodní řetězce | Silný konkurent v monitoringu letákových cen a promocí. Pokrývá však pouze letáky, nesleduje dynamické ceny v e-shopech (Rohlík, Alkohol.cz), slevy ve věrnostních aplikacích (Můj Albert, Lidl Plus), přepočet na litr alkoholu, marketingovou komunikaci ani legislativu. | [ipsos.com/cs-cz](https://www.ipsos.com/cs-cz) *(TODO: odkaz na stránku produktu)* |
-| **Euromonitor Price Tracking** | AI nástroj sleduje ceny, promo akce, dostupnost a sortiment jednotlivých SKU u online prodejců. Nabízí denní aktualizace a datové přehledy pro kategorii alkoholických nápojů. | Na dotaz (orientačně od cca 5 000–25 000+ USD ročně dle rozsahu) | Výrobci, značky a maloobchodní společnosti | Významný konkurent v online cenovém a sortimentním monitoringu. Je ale zaměřen čistě na e-commerce (unikají mu tištěné/PDF letáky kamenných řetězců a věrnostní aplikace v ČR) a nepokrývá komunikaci ani českou regulaci. | [euromonitor.com](https://www.euromonitor.com/) *(TODO: odkaz na stránku produktu)* |
+| **Ipsos Promo Tracker** | AI automaticky zpracovává akční letáky, identifikuje produkty podle EAN a získává informace o cenách a promo akcích. Výstupy lze přizpůsobit a propojit s interními systémy přes API. | Na vyžádání (demo) | Výrobci FMCG a maloobchodní řetězce | Silný konkurent v monitoringu letákových cen a promocí. Pokrývá však pouze letáky, nesleduje dynamické ceny v e-shopech (Rohlík, Alkohol.cz), slevy ve věrnostních aplikacích (Můj Albert, Lidl Plus), přepočet na litr alkoholu, marketingovou komunikaci ani legislativu. | [Ipsos – cenový monitoring](https://www.ipsos.com/cs-cz/cenovy-monitoring) *(samostatná stránka Promo Trackeru už není dostupná)* |
+| **Euromonitor Price Tracking** | AI nástroj sleduje ceny, promo akce, dostupnost a sortiment jednotlivých SKU u online prodejců. Nabízí denní aktualizace a datové přehledy pro kategorii alkoholických nápojů. | Od 5 000 USD ročně (dynamika kategorií a značek), od 25 000 USD ročně (vybraný koš SKU), párování s konkurencí na dotaz | Výrobci, značky a maloobchodní společnosti | Významný konkurent v online cenovém a sortimentním monitoringu. Je ale zaměřen čistě na e-commerce (unikají mu tištěné/PDF letáky kamenných řetězců a věrnostní aplikace v ČR) a nepokrývá komunikaci ani českou regulaci. | [Euromonitor – Price Tracking](https://euromonitor.com/solutions/custom-research/price-tracking) |
 | **NAUT Group – Retail Audit** | Terénní monitoring cen, dostupnosti produktů, umístění v regálech, podílu značky v regálu (shelf share) a promo vystavení prostřednictvím fyzického sběru v prodejnách. | Na vyžádání | Výrobci FMCG a značky působící v maloobchodě | Silný konkurent v oblasti fyzické dostupnosti a prezentace v kamenných prodejnách. Sběr je ale založen na drahém a periodickém terénním auditu, nikoli na kontinuálním autonomním agentním monitoringu online kanálů, reklam (Meta Ads) a legislativy. | [naut-group.com – Retail audit](https://naut-group.com/cs/audity-a-data/retail-audit/) |
 
 ## Mezera na trhu
 
-*TODO*
+### Pokrytí oblastí KIQ
+
+Vychází z matice konkurence výše. ✓ = pokrývá, ◐ = částečně, ✗ = nepokrývá, ? = neověřeno.
+
+| Řešení | Sortiment (KIQ 1) | Letáky (KIQ 2) | E-shopy (KIQ 2) | Věrnostní aplikace (KIQ 2) | Komunikace (KIQ 3) | Regulace (KIQ 4) | Průběžně | Pokrytí ČR |
+|---|---|---|---|---|---|---|---|---|
+| Kupi.cz | ✗ | ✓ | ✗ | ✗ | ◐ plocha v letáku | ✗ | ✓ | ✓ |
+| Newton Media | ✗ | ✗ | ✗ | ✗ | ✓ | ◐ jen přes média | ✓ | ✓ |
+| IWSR | ◐ data o inovacích | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ? |
+| NIQ | ◐ | ◐ | ◐ | ✗ | ✗ | ✗ | ✓ | ✗ pravděpodobně |
+| DataWeave | ✗ | ✓ | ◐ výpisy, banery | ✗ | ◐ share of media | ✗ | ✓ | ? |
+| Ipsos Promo Tracker | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Euromonitor Price Tracking | ✓ online SKU | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ denně | ? |
+| NAUT Group | ◐ dostupnost v regálu | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ periodický audit | ✓ |
+| **Náš MAS** | ✓ | ✓ | ✓ | ◐ ceny s aplikací z letáků | ✓ | ✓ | ✓ | ✓ |
+
+### V čem je náš MAS nový
+
+Žádné z osmi řešení nepokrývá všechny čtyři KIQ a žádné nespojuje ceny, sortiment, komunikaci a regulaci do jednoho pohledu. Mezera má čtyři části:
+
+1. **Všechny čtyři KIQ na jednom místě.** Cenové nástroje (Ipsos, Kupi, Euromonitor) nevidí komunikaci ani regulaci, mediální monitoring (Newton) nevidí ceny. Výrobce dnes musí kombinovat několik dodavatelů a souvislosti dohledávat ručně.
+2. **Souvislosti mezi zdroji, ne jen data.** Analytický agent páruje události napříč oblastmi, například akční cenu konkurenta s termínem jeho kampaně nebo se změnou daně, a z nich píše týdenní doporučení k promo a portfoliu. Konkurenti dodávají data nebo dashboardy, doporučení pro konkrétní rozhodnutí ne.
+3. **Zaměření na lihoviny v ČR.** Přepočet akčních cen na litr, sledování českých řetězců, e-shopů (Rohlik, Košík, Alkohol.cz) a české legislativy (sněmovní tisky, ODok, Celní správa). Globální nástroje (IWSR, NIQ, DataWeave, Euromonitor) mají pokrytí ČR neověřené nebo žádné.
+4. **Dostupnost pro středně velkého výrobce.** Průběžný autonomní sběr místo drahého periodického terénního auditu (NAUT) nebo ročního předplatného v desítkách tisíc USD (Euromonitor, IWSR).
+
+### Co MAS nenabízí (poctivě)
+
+- **Skutečné prodeje (sell-out).** Vidí jen nabídku a akční ceny, ne kolik se prodalo. To umí NIQ a IWSR.
+- **Fyzický regál.** Umístění a vystavení v kamenných prodejnách pokrývá jen terénní audit (NAUT).
+- **Přímý sběr z věrnostních aplikací.** Ceny „jen s aplikací“ zachytí jen tam, kde je řetězce uvádějí v letácích.
