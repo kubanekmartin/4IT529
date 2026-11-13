@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from test_regulatorni import (
     BASELINE_ANSWER,
     NAMES,
+    STIHANI,
     TISK_321,
     assessment,
     make_regulatorni,
@@ -23,13 +24,16 @@ def web(web_database_url):
 
 @pytest.fixture
 def collected(bus, clock, raw_dir, make_agent):
-    """Výchozí snímek 16. 11. 2026 a další snímek 17. 11., ve kterém přibyl tisk 321."""
+    """Výchozí snímek 16. 11. 2026 a další snímek 17. 11., ve kterém přibyl tisk 321. V datech
+    je i žádost o stíhání poslance se jménem v názvu, která na stránku nepatří."""
     llm = FakeLlm(BASELINE_ANSWER, {"tisky": [assessment(TISK_321, level="vysoký")]})
     send_zadani(bus)
-    make_regulatorni(make_agent, clock, raw_dir, llm).process_pending()
+    day1 = source_routes(day=1, extra_tisky=[STIHANI])
+    make_regulatorni(make_agent, clock, raw_dir, llm, day1).process_pending()
     clock.advance(days=1)
     send_zadani(bus)
-    make_regulatorni(make_agent, clock, raw_dir, llm, source_routes(day=2)).process_pending()
+    day2 = source_routes(day=2, extra_tisky=[STIHANI])
+    make_regulatorni(make_agent, clock, raw_dir, llm, day2).process_pending()
 
 
 def card(html, number):

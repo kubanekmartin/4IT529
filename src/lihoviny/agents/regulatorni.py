@@ -5,8 +5,9 @@ a poslance s orgány (`poslanci.zip`, kvůli poslaneckým klubům navrhovatelů)
 jednou denně v noci a vždy s úplným stavem, takže agent stáhne každý archiv jednou na Zadání,
 při denním sběru tedy dvě stažení denně.
 
-Bere tisky aktuálního volebního období kromě písemných interpelací (nejsou návrhem regulace
-a v názvu nesou jména). Nový je tisk, který agent ještě neviděl v žádném dřívějším snímku;
+Bere tisky aktuálního volebního období jen těch druhů, které navrhují pravidla (návrhy zákonů,
+rozpočet, smlouvy, akty EU); interpelace, žádosti o vydání poslance ke stíhání a podobné tisky
+regulací nejsou a jména nesou už v názvu. Nový je tisk, který agent ještě neviděl v žádném dřívějším snímku;
 v prvním snímku jsou nové všechny tisky období (nález pak má `baseline: true`). Nové tisky
 projdou filtrem klíčových slov v názvu a teprve ty, které jím projdou, posoudí LLM: zda se
 týkají výrobců lihovin, jaký mají dopad a odkdy mají platit. Nález vznikne jen u relevantního.
@@ -55,8 +56,11 @@ KEYWORDS = {
     "potraviny": r"potravin",
     "DPH": r"přidané\s+hodnot",
 }
-# Písemná interpelace: dotaz poslance členovi vlády, ne návrh regulace.
-_INTERPELACE = "6"
+# Druhy tisků, které navrhují nebo mění pravidla (druh_tisku.id_druh): návrhy zákonů, rozpočet,
+# mezinárodní smlouvy, akty EU a zákonná opatření Senátu. Ostatní druhy (interpelace, „Zpráva
+# a jiné“ se žádostmi o vydání poslance ke stíhání nebo návrhy na volbu) regulací nejsou
+# a jména osob nesou už ve zkráceném názvu, proto je agent vůbec nečte.
+_REGULATION_KINDS = frozenset({"1", "2", "3", "4", "41", "45", "46", "47", "49"})
 # Kolik tisků posoudí LLM jedním voláním (výchozí snímek jich má kolem deseti).
 BATCH = 20
 # Pojistka proti nečekaně velkému souboru v archivu (tisky.unl má dnes asi 12 MB).
@@ -252,7 +256,8 @@ def read_chamber(archive: bytes) -> Chamber:
 
 
 def read_tisky(archive: bytes, chamber: Chamber) -> list[Tisk]:
-    """Tisky probíhajícího období (bez písemných interpelací) z archivu tisky.zip, bez jmen."""
+    """Tisky probíhajícího období z archivu tisky.zip, jen druhy regulace (`_REGULATION_KINDS`),
+    bez jmen."""
     tables = _tables(
         archive, "tisky.zip", "tisky druh_tisku typ_zakon stavy typ_stavu predkladatel"
     )
@@ -274,7 +279,7 @@ def read_tisky(archive: bytes, chamber: Chamber) -> list[Tisk]:
             fast_track=row["rj"] == "1",
         )
         for row in tables["tisky"]
-        if row["id_org_obd"] == chamber.organ_id and row["id_druh"] != _INTERPELACE
+        if row["id_org_obd"] == chamber.organ_id and row["id_druh"] in _REGULATION_KINDS
     ]
 
 

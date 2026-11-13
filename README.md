@@ -132,7 +132,9 @@ která LLM v článku našel, ještě nahradí slovem „[osoba]“. Články uk
 Stáhne dva archivy [otevřených dat Poslanecké sněmovny](https://www.psp.cz/sqw/hp.sqw?k=1300):
 sněmovní tisky (`tisky.zip`, asi 4 MB) a poslance s orgány (`poslanci.zip`, kvůli poslaneckým
 klubům). Zdroj je obnovuje jednou denně v noci a vždy s úplným stavem, takže agent stáhne
-každý jednou za Zadání. Bere tisky probíhajícího volebního období kromě písemných interpelací.
+každý jednou za Zadání. Bere tisky probíhajícího volebního období jen těch druhů, které
+navrhují pravidla (návrhy zákonů, rozpočet, mezinárodní smlouvy, akty EU); interpelace, žádosti
+o vydání poslance ke stíhání nebo návrhy na volbu regulací nejsou a jména nesou už v názvu.
 Nové tisky (které agent v dřívějším snímku neviděl) projdou filtrem klíčových slov v názvu
 (líh, alkohol, spotřební daň, reklama, prodej, značení, obaly, návykové látky, DPH…) a jen ty
 posoudí LLM: relevance pro výrobce lihovin, dopad a odhad termínu účinnosti. Potřebuje

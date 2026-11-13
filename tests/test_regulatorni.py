@@ -30,8 +30,9 @@ TISK_133, TISK_153, TISK_193, TISK_208, TISK_243 = 43256, 43274, 43314, 43330, 4
 TISK_321, TISK_363 = 43443, 43486
 
 
-def archive(table_dir, *, skip_tisky=(), drop=()):
-    """Archiv ZIP jako od zdroje, složený z tabulek UNL v `table_dir`."""
+def archive(table_dir, *, skip_tisky=(), drop=(), extra_tisky=()):
+    """Archiv ZIP jako od zdroje, složený z tabulek UNL v `table_dir`; `extra_tisky` jsou
+    další řádky tabulky tisků."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zip_file:
         for table in sorted((FIXTURES / table_dir).glob("*.unl")):
@@ -43,7 +44,7 @@ def archive(table_dir, *, skip_tisky=(), drop=()):
                     line
                     for line in body.splitlines(keepends=True)
                     if line.split(b"|")[0].decode() not in {str(i) for i in skip_tisky}
-                )
+                ) + b"".join(row.encode("cp1250") + b"\n" for row in extra_tisky)
             zip_file.writestr(table.name, body)
     return buffer.getvalue()
 
@@ -54,6 +55,15 @@ def source_routes(*, day=2, **archive_options):
         TISKY_URL: archive("tisky", skip_tisky=skip, **archive_options),
         POSLANCI_URL: archive("poslanci"),
     }
+
+
+# Smyšlená žádost o souhlas s trestním stíháním poslance (druh 5 „Zpráva a jiné“): jméno je
+# už ve zkráceném názvu a klíčová slova (prodej, alkohol) ji pustí filtrem.
+STIHANI = (
+    "43500|5|251|400|0|0||174|||Žádost o souhlas s trestním stíháním posl. J. Pokusného"
+    " pro prodej alkoholu|01.09.2026|02.09.2026|||Žádost o vydání souhlasu k trestnímu stíhání"
+    " poslance Jana Pokusného pro prodej alkoholu nezletilým||||||2026-09-02 10:00|||"
+)
 
 
 def assessment(tisk_id, *, relevant=True, level="střední", effective="2027-01-01"):
@@ -184,6 +194,29 @@ def test_names_of_mps_never_reach_board_or_llm(bus, clock, raw_dir, make_agent, 
         assert name not in stored
         assert name not in sent
     assert "skupina poslanců (KDU-ČSL)" in sent  # místo jmen navrhovatelů tisku 243
+
+
+def test_tisky_whose_kind_names_a_person_are_left_out_of_raw_data_board_and_llm(
+    bus, board, clock, raw_dir, make_agent, database_url
+):
+    routes = source_routes(day=1, extra_tisky=[STIHANI])
+    llm = FakeLlm(BASELINE_ANSWER)
+    regulatorni = make_regulatorni(make_agent, clock, raw_dir, llm, routes)
+    zadani = send_zadani(bus)
+
+    regulatorni.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.content["item_count"] == 6  # žádost mezi tisky nepočítá
+    on_disk = b" ".join(read_raw(path)[1] for path in raw_dir.rglob("*.gz")).decode()
+    with psycopg.connect(database_url) as conn:
+        stored = conn.execute(
+            "SELECT string_agg(t::text, ' ') FROM (SELECT * FROM findings) t"
+        ).fetchone()[0]
+    assert "Novela z. o spotřebních daních" in on_disk
+    for text in [on_disk, stored, llm.calls[0].prompt]:
+        assert "Pokusn" not in text
+        assert "43500" not in text
 
 
 def test_raw_data_on_disk_is_minimized_without_names_and_keeps_hash_of_original(
