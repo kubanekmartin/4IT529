@@ -104,7 +104,7 @@ def test_ridici_is_registered_and_sends_zadani_only_to_registered_agents():
     assert AGENTS["ridici"] is Ridici
     assert [name for name in recipients if name not in AGENTS] == []
     assert "ozvena" not in Ridici.sberni_agenti
-    assert set(Ridici.sberni_agenti) == {"cenovy", "sortimentni"}
+    assert set(Ridici.sberni_agenti) == {"cenovy", "sortimentni", "medialni", "regulatorni"}
 
 
 def test_manual_beh_sends_zadani_to_every_sberny_agent_and_answers_with_the_beh(bus, make_agent):
