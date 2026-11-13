@@ -287,7 +287,7 @@ class Analyticky(Agent):
             "Den",
             [f"{day.day}. {day.month}." for day in days],
             series,
-            _count,
+            _format_count,
         )
 
 
@@ -668,7 +668,7 @@ def _category(podklady: Podklady, finding: Finding) -> str | None:
 def _chains_chart(akcni_ceny: list[Finding]) -> Chart:
     chains = Counter(str(f.content.get("chain")) for f in akcni_ceny)
     items = sorted(chains.items(), key=lambda item: (-item[1], item[0]))[:TOP_CHAINS]
-    return bar_chart("Akční ceny podle řetězce", ("Řetězec", "Akční ceny"), items, _count)
+    return bar_chart("Akční ceny podle řetězce", ("Řetězec", "Akční ceny"), items, _format_count)
 
 
 def _portfolio_chart(podklady: Podklady, akcni_ceny: list[Finding]) -> Chart:
@@ -706,7 +706,7 @@ def _novinky_chart(podklady: Podklady) -> Chart:
         (CATEGORIES.get(code, code), count)
         for code, count in sorted(categories.items(), key=lambda item: (-item[1], item[0]))
     ]
-    return bar_chart("Novinky podle kategorie", ("Kategorie", "Novinky"), items, _count)
+    return bar_chart("Novinky podle kategorie", ("Kategorie", "Novinky"), items, _format_count)
 
 
 def _when(value: datetime) -> str:
@@ -724,5 +724,5 @@ def _whole(value: float | Decimal) -> str:
     return f"{value:,.0f}".replace(",", "\xa0")
 
 
-def _count(value: float) -> str:
+def _format_count(value: float) -> str:
     return f"{value:.0f}"

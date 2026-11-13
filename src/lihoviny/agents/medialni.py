@@ -247,8 +247,8 @@ def _parse_articles(page: FetchResult) -> list[Article]:
             Article(
                 id=int(post["id"]),
                 published_at=datetime.fromisoformat(post["date_gmt"]).replace(tzinfo=UTC),
-                title=_plain_text(post["title"]["rendered"]),
-                text=_plain_text(post["content"]["rendered"]),
+                title=_article_text(post["title"]["rendered"]),
+                text=_article_text(post["content"]["rendered"]),
             )
             for post in json.loads(page.text)
         ]
@@ -273,7 +273,7 @@ def _without_texts(body: bytes) -> bytes:
     return json.dumps(kept).encode()
 
 
-def _plain_text(markup: str) -> str:
+def _article_text(markup: str) -> str:
     """Text z HTML článku: odstavce na řádcích, bez značek a entit."""
     text = re.sub(r"</(?:p|h\d|li|figcaption|blockquote)>|<br\s*/?>", "\n", markup)
     text = html.unescape(re.sub(r"<[^>]+>", "", text))

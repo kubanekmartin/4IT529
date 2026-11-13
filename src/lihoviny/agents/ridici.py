@@ -68,7 +68,7 @@ class Ridici(Agent):
     # (a třída v AGENTS). Ozvěna sem nepatří, není sběrná.
     sberni_agenti: ClassVar[tuple[str, ...]] = ("sortimentni", "cenovy", "medialni", "regulatorni")
     # Analytický agent, kterému běh Briefu pošle Zadání; bez něj se Brief nezadává.
-    analyst: ClassVar[str | None] = "analyticky"
+    analyticky_agent: ClassVar[str | None] = "analyticky"
 
     def handle_request(self, request: Message) -> dict[str, Any]:
         match request.content.get("beh", "collection"):
@@ -76,10 +76,10 @@ class Ridici(Agent):
                 beh = self._start_collection()
                 sent_to = list(self.sberni_agenti)
             case "brief":
-                if not self.analyst:
+                if not self.analyticky_agent:
                     raise BehError("Brief nemá komu zadat: řídicí agent nemá analytického agenta")
                 beh = self._start_brief()
-                sent_to = [self.analyst]
+                sent_to = [self.analyticky_agent]
             case unknown:
                 raise BehError(f"neznámý běh {unknown!r}, znám collection a brief")
         return {"beh_id": beh.id, "beh": beh.kind, "sent_to": sent_to}
@@ -99,7 +99,7 @@ class Ridici(Agent):
             beh = self.board.start_beh("brief", scheduled_for=scheduled_for)
             if beh is not None:
                 content = {"beh_id": beh.id, "collection": self._last_collection()}
-                self._send_zadani(beh, self.analyst, content)
+                self._send_zadani(beh, self.analyticky_agent, content)
         return beh
 
     def _last_collection(self) -> dict[str, Any] | None:
@@ -152,8 +152,8 @@ class Ridici(Agent):
                 message.conversation_id,
                 message.sender,
                 message.kind,
-                new_findings=_count(message.content.get("new_findings")),
-                item_count=_count(message.content.get("item_count")),
+                new_findings=_count_or_none(message.content.get("new_findings")),
+                item_count=_count_or_none(message.content.get("item_count")),
                 reason=None if reason is None else str(reason),
             )
             if zadani is not None and zadani.dotaz_id is not None:
@@ -276,7 +276,12 @@ class Ridici(Agent):
         if now >= collection:
             self._start_collection(scheduled_for=collection)
         brief = datetime.combine(now.date(), BRIEF_AT, tzinfo=PRAGUE)
-        if self.analyst and now.weekday() == MONDAY and now >= brief and self._collection_closed():
+        if (
+            self.analyticky_agent
+            and now.weekday() == MONDAY
+            and now >= brief
+            and self._collection_closed()
+        ):
             self._start_brief(scheduled_for=brief)
 
     def _collection_closed(self) -> bool:
@@ -324,7 +329,7 @@ def _minutes(limit: timedelta) -> int:
     return int(limit.total_seconds() // 60)
 
 
-def _count(value: Any) -> int | None:
+def _count_or_none(value: Any) -> int | None:
     """Počet z odpovědi jiného agenta, jen když je to opravdu celé číslo.
 
     `type(...) is int` schválně: `True` je v Pythonu také int, ale počet to není.

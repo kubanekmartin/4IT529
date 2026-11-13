@@ -23,11 +23,11 @@ from lihoviny.web.app import create_app
 
 class RidiciSNahrazkami(Ridici):
     sberni_agenti = ("sberny-a", "sberny-b")
-    analyst = None
+    analyticky_agent = None
 
 
 class RidiciSAnalytikem(RidiciSNahrazkami):
-    analyst = "analyticky"
+    analyticky_agent = "analyticky"
 
 
 class SbernyA(Agent):
@@ -100,7 +100,10 @@ def replies(bus, zadani):
 
 
 def test_ridici_is_registered_and_sends_zadani_only_to_registered_agents():
-    recipients = [*Ridici.sberni_agenti, *([Ridici.analyst] if Ridici.analyst else [])]
+    recipients = [
+        *Ridici.sberni_agenti,
+        *([Ridici.analyticky_agent] if Ridici.analyticky_agent else []),
+    ]
 
     assert AGENTS["ridici"] is Ridici
     assert [name for name in recipients if name not in AGENTS] == []
