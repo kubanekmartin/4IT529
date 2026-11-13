@@ -322,6 +322,86 @@ def test_brief_has_four_svg_charts_computed_from_findings_each_with_a_data_table
     assert "<td>Rum a tuzemák</td><td>1</td>" in chart(html, "Novinky podle kategorie")
 
 
+def record_clanek(board, article_id, title, manufacturers):
+    """Článek, jak ho zapíše mediální agent (#23): výrobců může být víc."""
+    snapshot = board.record_snapshot(
+        agent="medialni", source="zboziaprodej.cz", fetches=[], item_count=30
+    )
+    return board.record_finding(
+        kiq=3,
+        agent="medialni",
+        type="clanek",
+        snapshot_id=snapshot.id,
+        source_url=f"https://www.zboziaprodej.cz/?p={article_id}",
+        content={
+            "article_id": article_id,
+            "published_at": "2026-11-12T07:31:41+00:00",
+            "title": title,
+            "manufacturers": manufacturers,
+            "brands": [],
+            "channel": "pr",
+            "topic": "portfolio",
+            "summary": "Výrobce rozšiřuje nabídku. Investuje do výroby.",
+        },
+    )
+
+
+def test_articles_and_snemovni_tisky_follow_their_agents_contracts(bus, board, make_agent, web):
+    stock = record_clanek(board, 83123, "Stock modernizuje výrobu", ["Stock", "Diageo"])
+    jager = record_clanek(board, 83200, "Jägermeister mění láhev", ["Mast-Jägermeister"])
+    snapshot = board.record_snapshot(agent="regulatorni", source="psp.cz", fetches=[], item_count=1)
+    tisk = board.record_finding(
+        kiq=4,
+        agent="regulatorni",
+        type="snemovni_tisk",
+        snapshot_id=snapshot.id,
+        source_url="https://www.psp.cz/sqw/historie.sqw?o=10&t=133",
+        content={
+            "number": "133",
+            "title": "Novela z. o spotřebních daních",
+            "kind": "Návrh zákona",
+            "proposer": "skupina poslanců (ODS)",
+            "state": "1. čtení",
+            "impact": "Vyšší daň z lihu zdraží lihoviny.",
+            "impact_level": "vysoký",
+            "effective_date": "2027-01-01",
+            "baseline": True,
+        },
+    )
+    llm = FakeLlm(
+        brief_text(
+            what_happened=[
+                (3, "Stock investuje do výroby.", [stock.id]),
+                (3, "Jägermeister mění láhev.", [jager.id]),
+                (4, "Sněmovna projednává vyšší daň z lihu.", [tisk.id]),
+            ]
+        )
+    )
+    send_brief_zadani(bus, board)
+
+    make_agent(Analyticky, llm=llm).process_pending()
+
+    html = web.get("/brief").text
+    assert '<span class="tag">Stock</span> Stock investuje do výroby.' in kiq_block(html, 3)
+    assert "Jägermeister mění láhev." in section(html, "Netypické nálezy")
+    assert (
+        "Tisk 133: Novela z. o spotřebních daních (Poslanecká sněmovna PČR, otevřená data psp.cz)"
+        in kiq_block(html, 4)
+    )
+    assert "Stock modernizuje výrobu (zboziaprodej.cz)" in kiq_block(html, 3)
+    prompt = llm.calls[0].prompt
+    assert (
+        f"[F{stock.id}] článek: Stock modernizuje výrobu, vyšel 12. 11. 2026, "
+        "Výrobce rozšiřuje nabídku. Investuje do výroby., "
+        "výrobce Stock (sledovaný konkurent), Diageo"
+    ) in prompt
+    assert (
+        f"[F{tisk.id}] sněmovní tisk 133: Novela z. o spotřebních daních, Návrh zákona, "
+        "skupina poslanců (ODS), stav 1. čtení, dopad vysoký: Vyšší daň z lihu zdraží lihoviny., "
+        "účinnost asi od 2027-01-01, projednává se už od začátku sledování"
+    ) in prompt
+
+
 def test_source_link_is_only_http_or_https(bus, board, make_agent, web):
     snapshot = board.record_snapshot(agent="medialni", source="zdroj", fetches=[], item_count=1)
     article = board.record_finding(

@@ -58,6 +58,7 @@ LISTING_CATEGORIES = {
     "ovocné destiláty": "ovocne_destilaty",
     "míchaný nápoj": "rtd",
 }
+PSP_SOURCE = "Poslanecká sněmovna PČR, otevřená data psp.cz"
 # Strop nálezů jedné KIQ v zadání pro LLM; přednost mají sledovaní konkurenti a hluboké slevy.
 PROMPT_LIMIT = 300
 TOP_CHAINS = 10
@@ -111,7 +112,7 @@ class Podklady:
     until: datetime
     findings: dict[int, Finding]
     products: dict[int, Product]
-    manufacturers: dict[int, str | None]  # ID nálezu → výrobce, když ho jde zjistit
+    manufacturers: dict[int, list[str]]  # ID nálezu → výrobci (prázdný seznam = neznámí)
     failures: list[dict[str, Any]]
     kiqs_with_snapshot: set[int]  # KIQ, jejíž sběrný agent už zapsal aspoň jeden snímek
 
@@ -119,8 +120,11 @@ class Podklady:
         return [f for f in self.findings.values() if f.kiq == kiq]
 
     def competitors(self, finding_ids: Iterable[int]) -> list[str]:
-        found = {self.manufacturers[i] for i in finding_ids}
+        found = {maker for i in finding_ids for maker in self.manufacturers[i]}
         return [name for name in WATCHED_COMPETITORS if name in found]
+
+    def is_watched(self, finding: Finding) -> bool:
+        return any(maker in WATCHED_COMPETITORS for maker in self.manufacturers[finding.id])
 
 
 class Analyticky(Agent):
@@ -154,7 +158,7 @@ class Analyticky(Agent):
             until=until,
             findings=findings,
             products=products,
-            manufacturers={i: _manufacturer(f, products, makers) for i, f in findings.items()},
+            manufacturers={i: _manufacturers(f, products, makers) for i, f in findings.items()},
             failures=_failures(content),
             kiqs_with_snapshot={
                 kiq for agent, kiq in KIQ_OF_AGENT.items() if self.board.snapshots(agent=agent)
@@ -203,9 +207,11 @@ class Analyticky(Agent):
         days = sorted(by_day)
         counts = [
             Counter(
-                podklady.manufacturers.get(i) for i in self.board.snapshot_finding_ids(by_day[d])
+                maker
+                for i in self.board.snapshot_finding_ids(by_day[day])
+                for maker in podklady.manufacturers.get(i, [])
             )
-            for d in days
+            for day in days
         ]
         series = [(name, [c[name] for c in counts]) for name in WATCHED_COMPETITORS]
         return line_chart(
@@ -314,7 +320,7 @@ def _checked_claim(podklady: Podklady, text: str, sources: list[int]) -> dict[st
 def _only_other_manufacturers(podklady: Podklady, claim: dict[str, Any]) -> bool:
     """Tvrzení, jehož nálezy mají všechny známého výrobce a žádný není sledovaný konkurent."""
     makers = [podklady.manufacturers[s["finding_id"]] for s in claim["sources"]]
-    return not claim["competitors"] and all(maker is not None for maker in makers)
+    return not claim["competitors"] and all(makers)
 
 
 def _source(finding: Finding) -> dict[str, Any]:
@@ -332,6 +338,9 @@ def _label(finding: Finding, host: str) -> str:
             what = f"{content.get('product')}, {content.get('chain')}"
         case "novinka":
             what = f"Novinka {content.get('name')}"
+        case "snemovni_tisk":
+            # Licence otevřených dat Sněmovny žádá uvést zdroj (viz stránka Regulace).
+            return f"Tisk {content.get('number')}: {content.get('title')} ({PSP_SOURCE})"
         case _:
             what = str(content.get("title") or content.get("name") or finding.type)
     return f"{what} ({host})" if host else what
@@ -342,23 +351,29 @@ def _brand_makers(products: Iterable[Product]) -> dict[str, str]:
     return {plain_text(p.brand): p.manufacturer for p in products if p.manufacturer}
 
 
-def _manufacturer(
+def _manufacturers(
     finding: Finding, products: dict[int, Product], brand_makers: dict[str, str]
-) -> str | None:
-    """Výrobce nálezu: ze spárovaného produktu, z obsahu nálezu, nebo podle značky na začátku
-    názvu akční ceny (dokud párování #22 nespáruje všechny). Jméno sledovaného konkurenta se
-    sjednotí („Stock Plzeň-Božkov“ → „Stock“)."""
-    maker = None
-    if finding.product_id in products:
-        maker = products[finding.product_id].manufacturer
-    if maker is None and isinstance(finding.content.get("manufacturer"), str):
-        maker = finding.content["manufacturer"]
-    if maker is None and isinstance(finding.content.get("product"), str):
-        name = plain_text(finding.content["product"])
+) -> list[str]:
+    """Výrobci nálezu: ze spárovaného produktu, z obsahu nálezu (Novinka jednoho, článek
+    i několik), nebo podle značky na začátku názvu nespárované akční ceny. Jméno sledovaného
+    konkurenta se sjednotí („Stock Plzeň-Božkov“ → „Stock“)."""
+    content = finding.content
+    product = products.get(finding.product_id)
+    names: list[str] = []
+    if product is not None and product.manufacturer:
+        names = [product.manufacturer]
+    elif isinstance(content.get("manufacturer"), str):
+        names = [content["manufacturer"]]
+    elif isinstance(content.get("manufacturers"), list):
+        names = [name for name in content["manufacturers"] if isinstance(name, str)]
+    elif isinstance(content.get("product"), str):
+        name = plain_text(content["product"])
         brands = [b for b in brand_makers if name == b or name.startswith(b + " ")]
-        maker = brand_makers[max(brands, key=len)] if brands else None
-    if maker is None:
-        return None
+        names = [brand_makers[max(brands, key=len)]] if brands else []
+    return list(dict.fromkeys(_watched_name(name) for name in names))
+
+
+def _watched_name(maker: str) -> str:
     for competitor in WATCHED_COMPETITORS:
         if plain_text(competitor) in plain_text(maker):
             return competitor
@@ -398,42 +413,80 @@ def _gap_text(failure: dict[str, Any]) -> str:
 
 def _priority(podklady: Podklady, finding: Finding) -> tuple[bool, int, int]:
     """Pořadí v zadání pro LLM: sledovaní konkurenti, pak hlubší sleva, pak novější nález."""
-    watched = podklady.manufacturers[finding.id] in WATCHED_COMPETITORS
     discount = finding.content.get("discount_percent")
-    return (not watched, -discount if type(discount) is int else 0, -finding.id)
+    return (
+        not podklady.is_watched(finding),
+        -discount if type(discount) is int else 0,
+        -finding.id,
+    )
 
 
 def _digest(podklady: Podklady, finding: Finding) -> str:
     """Jeden řádek o nálezu pro LLM; neznámé typy nálezů jako zkrácený JSON obsahu."""
-    content = finding.content
     match finding.type:
         case "akcni_cena":
-            parts = [
-                f"akční cena: {content.get('product')}",
-                str(content.get("chain")),
-                _kc(content.get("price")),
-            ]
-            if content.get("discount_percent"):
-                parts.append(f"sleva {content['discount_percent']} %")
-            if content.get("card_price") is not None:
-                parts.append(f"s kartou {content.get('card_label')} {_kc(content['card_price'])}")
-            if content.get("valid_until"):
-                parts.append(f"platí do {content['valid_until']}")
-            if (ethanol := _ethanol_price(podklady, finding)) is not None:
-                parts.append(f"{_whole(ethanol)} Kč/l etanolu")
+            parts = _akcni_cena_parts(podklady, finding)
         case "novinka":
-            category = CATEGORIES.get(content.get("category"), content.get("category"))
-            parts = [f"novinka: {content.get('name')}", f"značka {content.get('brand')}"]
-            parts.append(str(category))
-            if content.get("note"):
-                parts.append(str(content["note"]))
+            parts = _novinka_parts(finding.content)
+        case "clanek":
+            parts = _clanek_parts(finding.content)
+        case "snemovni_tisk":
+            parts = _tisk_parts(finding.content)
         case _:
-            parts = [f"{finding.type}: {json.dumps(content, ensure_ascii=False)[:600]}"]
-    maker = podklady.manufacturers[finding.id]
-    if maker:
-        watched = " (sledovaný konkurent)" if maker in WATCHED_COMPETITORS else ""
-        parts.append(f"výrobce {maker}{watched}")
+            parts = [f"{finding.type}: {json.dumps(finding.content, ensure_ascii=False)[:600]}"]
+    if makers := podklady.manufacturers[finding.id]:
+        named = [f"{m} (sledovaný konkurent)" if m in WATCHED_COMPETITORS else m for m in makers]
+        parts.append("výrobce " + ", ".join(named))
     return f"[F{finding.id}] " + ", ".join(parts)
+
+
+def _akcni_cena_parts(podklady: Podklady, finding: Finding) -> list[str]:
+    content = finding.content
+    parts = [f"akční cena: {content.get('product')}", str(content.get("chain"))]
+    parts.append(_kc(content.get("price")))
+    if content.get("discount_percent"):
+        parts.append(f"sleva {content['discount_percent']} %")
+    if content.get("card_price") is not None:
+        parts.append(f"s kartou {content.get('card_label')} {_kc(content['card_price'])}")
+    if content.get("valid_until"):
+        parts.append(f"platí do {content['valid_until']}")
+    if (ethanol := _ethanol_price(podklady, finding)) is not None:
+        parts.append(f"{_whole(ethanol)} Kč/l etanolu")
+    return parts
+
+
+def _novinka_parts(content: dict[str, Any]) -> list[str]:
+    category = CATEGORIES.get(content.get("category"), content.get("category"))
+    parts = [f"novinka: {content.get('name')}", f"značka {content.get('brand')}", str(category)]
+    if content.get("note"):
+        parts.append(str(content["note"]))
+    return parts
+
+
+def _clanek_parts(content: dict[str, Any]) -> list[str]:
+    """Článek mediálního agenta (#23); `published_at` je datum vydání, ne zjištění."""
+    parts = [f"článek: {content.get('title')}"]
+    if isinstance(content.get("published_at"), str):
+        published = datetime.fromisoformat(content["published_at"]).astimezone(PRAGUE)
+        parts.append(f"vyšel {published.day}. {published.month}. {published.year}")
+    parts.append(str(content.get("summary")))
+    return parts
+
+
+def _tisk_parts(content: dict[str, Any]) -> list[str]:
+    """Sněmovní tisk regulatorního agenta (#24); tisk z výchozího snímku není nový."""
+    parts = [
+        f"sněmovní tisk {content.get('number')}: {content.get('title')}",
+        str(content.get("kind")),
+        str(content.get("proposer")),
+        f"stav {content.get('state')}",
+        f"dopad {content.get('impact_level')}: {content.get('impact')}",
+    ]
+    if content.get("effective_date"):
+        parts.append(f"účinnost asi od {content['effective_date']}")
+    if content.get("baseline"):
+        parts.append("projednává se už od začátku sledování")
+    return parts
 
 
 def _ethanol_price(podklady: Podklady, finding: Finding) -> float | None:
