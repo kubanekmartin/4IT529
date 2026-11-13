@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}{% endblock %} · Lihoviny MAS</title>
+  <style>
+    :root {
+      --bg: #f7f6f3; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6a66;
+      --border: #e2e0da; --accent: #8a3b12;
+      --request: #1f5fa8; --inform: #2c7a3f; --query: #8a6100; --failure: #b42318;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161614; --surface: #1f1f1c; --text: #ecebe6; --muted: #a3a29c;
+        --border: #34332f; --accent: #e09a6b;
+        --request: #7fb0ec; --inform: #7ccf8f; --query: #e6c05c; --failure: #f2877d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    header {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem;
+      padding: 1rem; border-bottom: 1px solid var(--border); background: var(--surface);
+    }
+    header .brand { font-weight: 700; color: var(--accent); text-decoration: none; }
+    nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
+    nav a { color: var(--text); text-decoration: none; }
+    nav a[aria-current="page"] { font-weight: 600; text-decoration: underline; }
+    main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
+    h1 { font-size: 1.5rem; margin: .5rem 0 1rem; }
+    .muted { color: var(--muted); }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">Lihoviny MAS</a>
+    <nav>
+      {% for path, label in nav %}
+      <a href="{{ path }}"{% if request.url.path == path %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

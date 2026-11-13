@@ -265,6 +265,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
+    { name = "tzdata" },
     { name = "uvicorn" },
 ]
 
@@ -282,6 +283,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3" },
     { name = "pydantic", specifier = ">=2.14" },
+    { name = "tzdata", specifier = ">=2026.6" },
     { name = "uvicorn", specifier = ">=0.54" },
 ]
 
