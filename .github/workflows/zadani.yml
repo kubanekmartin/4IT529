@@ -38,6 +38,8 @@ defaults:
 jobs:
   zadani:
     runs-on: ubuntu-24.04
+    # Stejný klíč jako nasazení (= root na VM): secrets z prostředí `produkce`.
+    environment: produkce
     timeout-minutes: 65
     steps:
       - name: SSH klíč a otisk serveru

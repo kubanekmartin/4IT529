@@ -90,6 +90,8 @@ setup_app() {
     if ! id "$DEPLOY_USER" >/dev/null 2>&1; then
         useradd --system --create-home --shell /bin/bash --user-group "$DEPLOY_USER"
     fi
+    # Bez skupiny docker nejde `docker compose`; skupina docker = root na VM, proto klíč
+    # tohoto uživatele patří jen do GitHub prostředí omezeného na main (README, Nasazení).
     usermod -aG docker "$DEPLOY_USER"
 
     step "skripty"

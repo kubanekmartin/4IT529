@@ -14,10 +14,10 @@ cp .env.example .env                          # doplň hesla, např. openssl ran
 docker compose up --build                     # Postgres, migrace, web, agenti
 ```
 
-- Web: <http://127.0.0.1:8510/log> (port mění `WEB_HOST_PORT`)
-- Postgres: `127.0.0.1:55431` (port mění `POSTGRES_HOST_PORT`)
+- Web: <http://127.0.0.1:8510/log> (port mění `WEB_HOST_PORT`, jen na `127.0.0.1`)
+- Postgres nemá port na hostiteli: `docker compose exec db psql -U lihoviny`
 
-Porty jsou jen na `127.0.0.1`. Zadání diagnostickému agentovi Ozvěna:
+Zadání diagnostickému agentovi Ozvěna:
 
 ```sh
 docker compose exec ozvena lihoviny zadani ozvena '{"text": "ahoj"}'
@@ -63,11 +63,18 @@ a `X-Robots-Tag: noindex`; kontejnery jen na `127.0.0.1`).
 
 - Po zeleném CI na `main` workflow **Nasazení** (`.github/workflows/deploy.yml`) pošle
   `git archive` commitu přes SSH na server. Skript `deploy/lihoviny-deploy` ho rozbalí do
-  `/srv/lihoviny/releases/<sha>`, spustí `docker compose up --build` a ověří web. Server
-  nepotřebuje přístup na GitHub.
-- Klíč v secrets `DEPLOY_SSH_KEY` patří uživateli `lihoviny-deploy` a smí spustit jen tento skript
+  `/srv/lihoviny/releases/<sha>` (nejvýš 100 MB komprimovaný a 256 MB rozbalený, aby gzip
+  bomba nezaplnila disk sdílený s ostatními weby), spustí `docker compose up --build` a ověří
+  web. Když nová verze nenaběhne, skript znovu spustí předchozí release; migrace se
+  nevracejí, schéma zůstane novější. Server nepotřebuje přístup na GitHub.
+- Klíč `DEPLOY_SSH_KEY` patří uživateli `lihoviny-deploy` a smí spustit jen tento skript
   (forced command, bez shellu a přesměrování portů). Uživatel `deploy` na serveru už patří
   osobnímu webu, proto vlastní uživatel.
+- `lihoviny-deploy` je ve skupině `docker` (bez ní `docker compose` nejde) a skript sestaví
+  a spustí, co přijde v archivu. **Kdo má klíč, je tedy na VM root.** Proto patří
+  `DEPLOY_SSH_KEY` a `DEPLOY_KNOWN_HOSTS` do GitHub prostředí `produkce` omezeného na větev
+  `main` (oba workflow mají `environment: produkce`), ne do secrets celého repa, ke kterým se
+  dostane workflow z jakékoli větve.
 - Ruční Zadání: workflow **Ruční Zadání** (příjemce, obsah jako JSON, kolik sekund čekat).
   Odpověď je ve výstupu workflow i v logu komunikace.
 - Tajemství jsou jen v `/srv/lihoviny/.env` (práva 600). API klíč vloží Martin sám, klíč se
