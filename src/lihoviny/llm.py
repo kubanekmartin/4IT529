@@ -15,7 +15,7 @@ from pydantic import BaseModel
 DEFAULT_MODEL = "claude-sonnet-5-5"
 # Jedno volání trvá nejvýš (1 + RETRIES) × TIMEOUT = 3 minuty. Řídicí agent čeká na odpověď
 # Zadání 30 minut; výchozí limity SDK (3 × 10 minut) by ho vyčerpaly jediným zaseknutým voláním
-# a běžící agent by dostal Selhání. Psaní Briefu může dostat delší limit (`timeout=`).
+# a běžící agent by dostal Selhání. Psaní Briefu má delší limit (`Analyticky.llm_timeout`).
 TIMEOUT = 60.0
 RETRIES = 2
 MAX_TOKENS = 16000

@@ -10,6 +10,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 
 | Stránka | Co |
 | --- | --- |
+| `/brief` | aktuální Brief (na něj vede `/`), `/brief/archiv` starší Briefy |
 | `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
 | `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
@@ -22,7 +23,7 @@ cp .env.example .env                          # doplň hesla, např. openssl ran
 docker compose up --build                     # Postgres, migrace, web, agenti
 ```
 
-- Web: <http://127.0.0.1:8510/log> (port mění `WEB_HOST_PORT`, jen na `127.0.0.1`)
+- Web: <http://127.0.0.1:8510/> (port mění `WEB_HOST_PORT`, jen na `127.0.0.1`)
 - Postgres nemá port na hostiteli: `docker compose exec db psql -U lihoviny`
 
 Zadání diagnostickému agentovi Ozvěna:
@@ -89,7 +90,7 @@ bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
 
 Řídicí agent (`ridici`) každý den v 6:00 pražského času pošle Zadání sběrným agentům
 z `Ridici.sberni_agenti` (`src/lihoviny/agents/ridici.py`) a v pondělí v 7:00 Zadání Briefu
-analytickému agentovi, jakmile bude zapsaný v `Ridici.analyst`. Za agenta, který do 30 minut
+analytickému agentovi z `Ridici.analyst` (`analyticky`). Za agenta, který do 30 minut
 neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den.
 
 Stránka <http://127.0.0.1:8510/behy> ukazuje poslední běhy a varování, když agent v posledním
@@ -105,6 +106,35 @@ docker compose exec ridici lihoviny zadani ridici '{"beh": "brief"}'   # Brief
 Z GitHub Actions jde totéž přes workflow pro ruční Zadání (ticket Nasazení): příjemce `ridici`,
 obsah `{}` nebo `{"beh": "brief"}`. Odpověď řídicího agenta jen potvrdí zahájení běhu
 (číslo běhu a komu šlo Zadání); výsledky sběrných agentů jsou v logu a na stránce Běhy.
+
+## Analytický agent a Brief
+
+Na Zadání od řídicího agenta (pondělí 7:00 nebo ručně) analytický agent (`analyticky`) napíše
+ze sdílené tabule Brief za posledních 7 dní: Co se stalo podle KIQ, Netypické nálezy
+a Doporučení k portfoliu zadavatele, se čtyřmi grafy. Stránka <http://127.0.0.1:8510/brief>
+ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
+
+- Do období patří nálezy zjištěné za 7 dní a starší akční ceny, které snímek z týdne viděl
+  znovu (platí dál). Výrobce nálezu bere ze spárovaného produktu, z obsahu nálezu, jinak podle
+  značky na začátku názvu akční ceny (značky a výrobce zná z produktů sortimentního agenta).
+- Text píše LLM s effortem `high` (sběrní agenti `low`), jedno volání nejvýš 4 minuty na
+  pokus, celkem 12 minut, tedy uvnitř 30 minut, které řídicí agent čeká na odpověď. Model
+  mění `LLM_MODEL_ANALYTICKY`.
+- Každé tvrzení odkazuje na zdroj nálezu. Tvrzení, které necituje žádný nález ze zadání pro
+  LLM, agent vypustí; doporučení k produktu mimo portfolio také. Tvrzení jen o výrobcích mimo
+  sledované konkurenty přesune do Netypických nálezů, o sledovaných konkurentech dá nahoru.
+- KIQ bez nálezů Brief uvede jako „bez dat“. Selhání posledního sběru (z výsledků, které
+  řídicí agent přikládá k Zadání) uvede v rámečku nahoře i u dotčené KIQ.
+- Grafy (akční ceny podle řetězce, akční ceny sledovaných konkurentů podle dne, cena za litr
+  etanolu portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
+  agent sám z nálezů a ukládá je s Briefem jako SVG; web je vloží bez JavaScriptu. Pod každým
+  grafem je tabulka s daty.
+- Portfolio zadavatele (návrh k odsouhlasení týmem) a sledovaní konkurenti jsou
+  v `src/lihoviny/zadavatel.toml`; sortimentní agent odtud bere jména konkurentů.
+
+```sh
+docker compose exec ridici lihoviny zadani ridici '{"beh": "brief"}'
+```
 
 ## Nasazení
 
@@ -168,9 +198,11 @@ docker buildx build --platform linux/arm64 .
 | `src/lihoviny/bus.py` | sběrnice zpráv (REQUEST = Zadání, INFORM, QUERY = Dotaz, FAILURE = Selhání) |
 | `src/lihoviny/agent.py` | společný základ agenta, obsah odpovědi sběrného agenta |
 | `src/lihoviny/agents/` | jednotliví agenti a jejich registr |
-| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty a běhy řídicího agenta se Zadáními |
+| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty, běhy řídicího agenta se Zadáními a Briefy |
 | `src/lihoviny/db.py` | připojení k Postgresu a transakce přes sběrnici i tabuli |
 | `src/lihoviny/products.py` | kategorie, normalizovaný klíč produktu, objem a obsah alkoholu z názvu |
+| `src/lihoviny/zadavatel.toml` | portfolio zadavatele a sledovaní konkurenti (načítá `zadavatel.py`) |
+| `src/lihoviny/charts.py` | grafy Briefu jako SVG |
 | `src/lihoviny/clock.py` | hodiny (skutečné a pro testy), pražský čas |
 | `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka |
 | `src/lihoviny/llm.py` | adaptér LLM (Claude API) a jeho náhražka |
