@@ -12,7 +12,8 @@ import psycopg
 from fastapi import APIRouter, Depends, Request
 from psycopg.rows import dict_row
 
-from lihoviny.web.common import PRAGUE, db, templates
+from lihoviny.clock import PRAGUE
+from lihoviny.web.common import czech_date, db, templates
 
 router = APIRouter()
 
@@ -64,18 +65,18 @@ def short_number(value: float | None) -> str:
 
 def validity(content: dict[str, Any]) -> str:
     """Období platnosti: „do 17. 11. 2026“, se začátkem „16. 11. – 17. 11. 2026“."""
-    until = content.get("valid_until") and date.fromisoformat(content["valid_until"])
-    since = content.get("valid_from") and date.fromisoformat(content["valid_from"])
-    if not until:
-        return f"od {_day(since)}" if since else "neuvedeno"
-    if not since:
-        return f"do {_day(until)}"
-    start = f"{since.day}. {since.month}." if since.year == until.year else _day(since)
-    return f"{start} – {_day(until)}"
+    until = _iso_date(content["valid_until"])
+    since = _iso_date(content["valid_from"])
+    if until is None:
+        return f"od {czech_date(since)}" if since else "neuvedeno"
+    if since is None:
+        return f"do {czech_date(until)}"
+    start = f"{since.day}. {since.month}." if since.year == until.year else czech_date(since)
+    return f"{start} – {czech_date(until)}"
 
 
-def _day(value: date) -> str:
-    return f"{value.day}. {value.month}. {value.year}"
+def _iso_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
 
 
 templates.env.filters["cislo"] = czech_number

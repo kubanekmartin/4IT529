@@ -11,6 +11,7 @@ from psycopg.rows import class_row
 
 from lihoviny.agents.ridici import ANSWER_LIMIT
 from lihoviny.board import BEH_COLUMNS, ZADANI_COLUMNS, Beh, Zadani
+from lihoviny.bus import Kind
 from lihoviny.web.common import db, prague_time, templates
 
 router = APIRouter()
@@ -61,7 +62,7 @@ def behy_page(request: Request, conn: Annotated[psycopg.Connection, Depends(db)]
         BehView(beh, [_zadani_view(item) for item in zadani if item.beh_id == beh.id])
         for beh in behy
     ]
-    warnings = [item for item in latest if item.outcome == "FAILURE" or item.item_count == 0]
+    warnings = [item for item in latest if item.outcome == Kind.FAILURE or item.item_count == 0]
     return templates.TemplateResponse(
         request,
         "behy.html",
@@ -73,7 +74,7 @@ def _zadani_view(zadani: Zadani) -> ZadaniView:
     if zadani.outcome is None:
         deadline = prague_time(zadani.sent_at + ANSWER_LIMIT)
         return ZadaniView(zadani, f"čeká na odpověď, nejdéle do {deadline}", "waiting")
-    if zadani.outcome == "FAILURE":
+    if zadani.outcome == Kind.FAILURE:
         return ZadaniView(zadani, f"Selhání: {zadani.reason or 'bez důvodu'}", "failure")
     if zadani.item_count == 0:
         return ZadaniView(zadani, "prázdný snímek (0 položek)", "warning")

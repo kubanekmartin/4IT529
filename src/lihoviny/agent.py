@@ -71,7 +71,6 @@ class Agent:
         return transaction(self.board.database_url)
 
     def process_pending(self) -> int:
-        """Vyzvedne a obslouží všechny čekající zprávy. Vrátí jejich počet."""
         handled = 0
         while (message := self.bus.claim(self.name)) is not None:
             self._handle(message)

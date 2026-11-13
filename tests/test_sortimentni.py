@@ -183,7 +183,7 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
     assert (hennessy.first_seen_at, hennessy.first_seen_url, hennessy.source_product_id) == (
         clock.now(),
         "https://www.rohlik.cz/1358451-hennessy-v-s-40-obj",
-        "1358451",
+        1358451,
     )
     # Třídění a určení výrobce je extrakce: nízký effort podle specu.
     assert [call.effort for call in llm.calls] == ["low", "low"]

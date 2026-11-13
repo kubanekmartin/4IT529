@@ -44,7 +44,7 @@ class Message:
         object.__setattr__(self, "kind", Kind(self.kind))
 
 
-_COLUMNS = "id, conversation_id, kind, sender, recipient, content, sent_at, claimed_at"
+MESSAGE_COLUMNS = "id, conversation_id, kind, sender, recipient, content, sent_at, claimed_at"
 
 
 class Bus:
@@ -67,7 +67,7 @@ class Bus:
                 f"""
                 INSERT INTO messages (conversation_id, kind, sender, recipient, content, sent_at)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING {_COLUMNS}
+                RETURNING {MESSAGE_COLUMNS}
                 """,
                 [
                     conversation_id or uuid.uuid4(),
@@ -89,7 +89,6 @@ class Bus:
         )
 
     def claim(self, recipient: str) -> Message | None:
-        """Vyzvedne nejstarší nevyzvednutou zprávu pro příjemce, nebo vrátí None."""
         with self._cursor() as cur:
             return cur.execute(
                 f"""
@@ -101,7 +100,7 @@ class Bus:
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING {_COLUMNS}
+                RETURNING {MESSAGE_COLUMNS}
                 """,
                 [self._clock.now(), recipient],
             ).fetchone()
@@ -109,7 +108,7 @@ class Bus:
     def conversation(self, conversation_id: uuid.UUID) -> list[Message]:
         with self._cursor() as cur:
             return cur.execute(
-                f"SELECT {_COLUMNS} FROM messages WHERE conversation_id = %s ORDER BY id",
+                f"SELECT {MESSAGE_COLUMNS} FROM messages WHERE conversation_id = %s ORDER BY id",
                 [conversation_id],
             ).fetchall()
 

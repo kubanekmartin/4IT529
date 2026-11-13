@@ -4,15 +4,14 @@ import logging
 import uuid
 from datetime import datetime, time, timedelta
 from typing import Any, ClassVar
-from zoneinfo import ZoneInfo
 
 from lihoviny.agent import Agent
 from lihoviny.board import Beh
 from lihoviny.bus import Kind, Message
+from lihoviny.clock import PRAGUE
 
 log = logging.getLogger(__name__)
 
-PRAGUE = ZoneInfo("Europe/Prague")
 COLLECTION_AT = time(6, 0)  # denní sběr, pražský čas
 BRIEF_AT = time(7, 0)  # Brief v pondělí, pražský čas
 MONDAY = 0
@@ -136,7 +135,7 @@ class Ridici(Agent):
     def _fail_overdue(self) -> None:
         for zadani in self.board.waiting_zadani(sent_before=self.clock.now() - ANSWER_LIMIT):
             reason = "bez odpovědi do 30 minut"
-            if self.board.record_outcome(zadani.conversation_id, "FAILURE", reason=reason):
+            if self.board.record_outcome(zadani.conversation_id, Kind.FAILURE, reason=reason):
                 self.bus.send(
                     kind=Kind.FAILURE,
                     sender=self.name,

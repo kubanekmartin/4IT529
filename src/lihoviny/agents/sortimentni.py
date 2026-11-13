@@ -109,7 +109,7 @@ class UnrecordedProduct:
     manufacturer: str | None = None
 
     @property
-    def first(self) -> Listing:
+    def oldest_listing(self) -> Listing:
         # Nejnižší ID u zdroje je nejstarší karta: obvykle samotný produkt, ne dárkové balení.
         return min(self.listings, key=lambda listing: listing.source_id)
 
@@ -157,7 +157,7 @@ class Sortimentni(Agent):
         unrecorded = [
             UnrecordedProduct(group) for key, group in in_snapshot.items() if key not in known
         ]
-        self._describe(unrecorded, source_brands, list(known.values()))
+        self._add_category_brand_manufacturer(unrecorded, source_brands, list(known.values()))
 
         previous = self.board.snapshots(agent=self.name)
         baseline = not previous
@@ -173,7 +173,9 @@ class Sortimentni(Agent):
                 stored = self._record_product(product, snapshot.id)
                 # Výchozí snímek: jen štítek prodejce. Později: ID u zdroje vyšší než výchozí stav.
                 is_novinka = (
-                    product.labelled_new if baseline else product.first.source_id > watermark
+                    product.labelled_new
+                    if baseline
+                    else product.oldest_listing.source_id > watermark
                 )
                 if is_novinka:
                     note = SELLER_NOTE if baseline else None
@@ -190,7 +192,7 @@ class Sortimentni(Agent):
             snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(in_snapshot)
         )
 
-    def _describe(
+    def _add_category_brand_manufacturer(
         self, unrecorded: list[UnrecordedProduct], source_brands: set[str], known
     ) -> None:
         """Doplní novým produktům kategorii, značku a výrobce; LLM jen tam, kde zdroj nestačí."""
@@ -198,7 +200,7 @@ class Sortimentni(Agent):
         unclear = []
         for product in unrecorded:
             product.category = _source_category(product.listings)
-            product.brand = _match_brand(product.first.name, brands)
+            product.brand = _match_brand(product.oldest_listing.name, brands)
             if product.category is None or product.brand is None:
                 unclear.append(product)
         if unclear:
@@ -214,11 +216,11 @@ class Sortimentni(Agent):
     def _classify(self, unclear: list[UnrecordedProduct]) -> None:
         items = [
             {
-                "id": str(product.first.source_id),
-                "nazev": product.first.name,
+                "id": str(product.oldest_listing.source_id),
+                "nazev": product.oldest_listing.name,
                 "kategorie_u_zdroje": sorted({x.source_category_name for x in product.listings}),
-                "objem_ml": product.first.volume_ml,
-                "alkohol_obj_procent": float(product.first.abv),
+                "objem_ml": product.oldest_listing.volume_ml,
+                "alkohol_obj_procent": float(product.oldest_listing.abv),
             }
             for product in unclear
         ]
@@ -236,9 +238,9 @@ class Sortimentni(Agent):
         )
         by_id = {item.id: item for item in answer.products}
         for product in unclear:
-            item = by_id.get(str(product.first.source_id))
+            item = by_id.get(str(product.oldest_listing.source_id))
             if item is None:
-                raise LlmError(f"LLM nezařadil produkt {product.first.name!r}")
+                raise LlmError(f"LLM nezařadil produkt {product.oldest_listing.name!r}")
             product.category = product.category or item.category
             product.brand = product.brand or item.brand
 
@@ -259,18 +261,18 @@ class Sortimentni(Agent):
         return found
 
     def _record_product(self, product: UnrecordedProduct, snapshot_id: int) -> Product:
-        first = product.first
+        listing = product.oldest_listing
         return self.board.record_product(
-            normalized_key=first.key,
+            normalized_key=listing.key,
             manufacturer=product.manufacturer,
             brand=product.brand,
-            name=first.name,
-            volume_ml=first.volume_ml,
-            abv=first.abv,
+            name=listing.name,
+            volume_ml=listing.volume_ml,
+            abv=listing.abv,
             category=product.category,
-            first_seen_url=first.url,
+            first_seen_url=listing.url,
             first_seen_snapshot_id=snapshot_id,
-            source_product_id=str(first.source_id),
+            source_product_id=listing.source_id,
         )
 
     def _record_novinka(
@@ -307,14 +309,18 @@ _SYSTEM = (
 def _subcategories(root: FetchResult) -> dict[str, str]:
     """Adresy stránek podkategorií Lihovin → jejich název u zdroje (bez nealko nápojů)."""
     try:
-        (category,) = [
+        categories = [
             query["state"]["data"]
             for query in _queries(_page_props(root))
             if query["queryKey"][0] == "category"
         ]
+        if len(categories) != 1:
+            raise SourceFormatError(
+                f"{root.url}: čekám jeden seznam podkategorií, stránka jich má {len(categories)}"
+            )
         return {
             f"{BASE_URL}/c{sub['categoryId']}-{sub['slug']}": sub["name"]
-            for sub in category["categories"]
+            for sub in categories[0]["categories"]
             if sub["categoryId"] not in SKIPPED_SOURCE_CATEGORIES
         }
     except (KeyError, TypeError, ValueError) as error:
@@ -324,11 +330,8 @@ def _subcategories(root: FetchResult) -> dict[str, str]:
 def _parse_subcategories(
     pages: list[FetchResult], names: dict[str, str]
 ) -> tuple[list[Listing], set[str]]:
-    """Karty produktů a značky z filtru všech stránek podkategorií.
-
-    Stránka bez karet, nebo výpis, ve kterém není žádná lihovina, znamená, že Rohlík změnil
-    stránku: prázdný snímek by vypadal jako zdravý den bez Novinek, proto Selhání.
-    """
+    """Stránka bez karet, nebo výpis, ve kterém není žádná lihovina, znamená, že Rohlík změnil
+    stránku: prázdný snímek by vypadal jako zdravý den bez Novinek, proto Selhání."""
     listings: list[Listing] = []
     brands: set[str] = set()
     for page in pages:
@@ -383,15 +386,14 @@ def _listing(card: dict[str, Any], category_id: int, category_name: str) -> List
 
 
 def _page_brands(props: dict[str, Any]) -> set[str]:
-    """Značky z filtru „Značka“ na stránce podkategorie."""
-    return {
-        option["title"]
-        for query in _queries(props)
-        if query["queryKey"][0] == "getCategoryFilters"
-        for group in query["state"]["data"]["filterGroups"]
-        if group["tag"] == "znacka"
-        for option in group["options"]
-    }
+    brands: set[str] = set()
+    for query in _queries(props):
+        if query["queryKey"][0] != "getCategoryFilters":
+            continue
+        for group in query["state"]["data"]["filterGroups"]:
+            if group["tag"] == "znacka":  # filtr „Značka“
+                brands.update(option["title"] for option in group["options"])
+    return brands
 
 
 def _source_category(listings: list[Listing]) -> Category | None:
@@ -420,7 +422,7 @@ def _baseline_watermark(previous, known) -> int:
         return 0
     baseline_id = previous[0].id
     return max(
-        (int(p.source_product_id) for p in known if p.first_seen_snapshot_id == baseline_id),
+        (p.source_product_id for p in known if p.first_seen_snapshot_id == baseline_id),
         default=0,
     )
 

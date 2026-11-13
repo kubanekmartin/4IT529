@@ -6,6 +6,10 @@ V testech `FakeClock` posouvá čas okamžitě, takže rozvrh, limity a pauzy jd
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from zoneinfo import ZoneInfo
+
+# Rozvrh i web počítají v pražském čase; ukládá se UTC.
+PRAGUE = ZoneInfo("Europe/Prague")
 
 
 class Clock(Protocol):

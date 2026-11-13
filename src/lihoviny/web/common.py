@@ -2,32 +2,35 @@
 
 import json
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import psycopg
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
-PRAGUE = ZoneInfo("Europe/Prague")
+from lihoviny.clock import PRAGUE
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+def czech_date(value: date) -> str:
+    """Datum česky: 16. 11. 2026."""
+    return f"{value.day}. {value.month}. {value.year}"
 
 
 def prague_time(value: datetime | None) -> str:
     if value is None:
         return ""
     local = value.astimezone(PRAGUE)
-    return f"{local.day}. {local.month}. {local.year} {local.hour}:{local:%M:%S}"
+    return f"{czech_date(local)} {local.hour}:{local:%M:%S}"
 
 
 def prague_date(value: datetime | None) -> str:
     if value is None:
         return ""
-    local = value.astimezone(PRAGUE)
-    return f"{local.day}. {local.month}. {local.year}"
+    return czech_date(value.astimezone(PRAGUE))
 
 
 def pretty_json(value: object) -> str:

@@ -34,15 +34,15 @@ def test_sortiment_shows_novinky_and_products_by_category(web, board):
         agent="sortimentni", source="rohlik.cz", fetches=[], item_count=3
     )
     add_product(
-        board, snapshot, "1287783", "Božkov Originál Tuzemský 37,5% obj.", "Božkov", "Stock",
+        board, snapshot, 1287783, "Božkov Originál Tuzemský 37,5% obj.", "Božkov", "Stock",
         500, "37.5", "rum_tuzemak",
     )  # fmt: skip
     hennessy = add_product(
-        board, snapshot, "1358451", "Hennessy V.S 40% obj.", "Hennessy", "Moët Hennessy",
+        board, snapshot, 1358451, "Hennessy V.S 40% obj.", "Hennessy", "Moët Hennessy",
         700, "40", "brandy",
     )  # fmt: skip
     modra = add_product(
-        board, snapshot, "1485101", "Božkov Modrá 19 % obj.", "Božkov", "Stock",
+        board, snapshot, 1485101, "Božkov Modrá 19 % obj.", "Božkov", "Stock",
         500, "19", "ostatni_likery",
     )  # fmt: skip
     board.record_finding(

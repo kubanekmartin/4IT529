@@ -1,7 +1,9 @@
 """Adaptér stahování ze zdrojů.
 
 `HttpFetcher` stahuje ohleduplně: mezi požadavky na tentýž zdroj drží pauzu (crawl-delay),
-při 429 a 5xx to zkusí celkem třikrát s rostoucí pauzou a respektuje `Retry-After`.
+při 429 a dočasné chybě serveru (500, 502, 503, 504) to zkusí celkem třikrát s rostoucí
+pauzou a respektuje `Retry-After`. Ostatní chyby (i 501 a 505) jsou trvalé, další pokus
+nepomůže.
 Každou úspěšnou odpověď uloží zabalenou (gzip) na disk, aby šla zpětně znovu zpracovat.
 V testech ho nahradí `FakeFetcher`, který místo webu vrací uložené ukázky stránek.
 """
@@ -42,9 +44,6 @@ class FetchResult:
     @property
     def text(self) -> str:
         return self.body.decode(_charset(self.headers.get("content-type", "")))
-
-    def json(self) -> Any:
-        return json.loads(self.body)
 
 
 class Fetcher(Protocol):

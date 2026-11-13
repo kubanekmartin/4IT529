@@ -19,6 +19,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from lihoviny import db
+from lihoviny.bus import Kind
 from lihoviny.clock import Clock
 from lihoviny.fetch import FetchResult
 from lihoviny.products import Category
@@ -65,12 +66,12 @@ class Product:
     first_seen_at: datetime
     first_seen_url: str
     first_seen_snapshot_id: int
-    source_product_id: str
+    source_product_id: int
 
 
 _FINDING_COLUMNS = "id, kiq, agent, type, product_id, snapshot_id, source_url, content, found_at"
 _SNAPSHOT_COLUMNS = "id, agent, source, taken_at, raw_paths, item_count"
-_PRODUCT_COLUMNS = (
+PRODUCT_COLUMNS = (
     "id, normalized_key, manufacturer, brand, name, volume_ml, abv, category, first_seen_at,"
     " first_seen_url, first_seen_snapshot_id, source_product_id"
 )
@@ -134,7 +135,6 @@ class Board:
             ).fetchone()
 
     def snapshots(self, *, agent: str) -> list[Snapshot]:
-        """Všechny snímky agenta od nejstaršího."""
         with self._cursor(Snapshot) as cur:
             return cur.execute(
                 f"SELECT {_SNAPSHOT_COLUMNS} FROM snapshots WHERE agent = %s ORDER BY id", [agent]
@@ -152,7 +152,7 @@ class Board:
         category: Category,
         first_seen_url: str,
         first_seen_snapshot_id: int,
-        source_product_id: str,
+        source_product_id: int,
     ) -> Product:
         """Zapíše nově viděný produkt; `first_seen_at` = clock.now()."""
         with self._cursor(Product) as cur:
@@ -162,7 +162,7 @@ class Board:
                     (normalized_key, manufacturer, brand, name, volume_ml, abv, category,
                      first_seen_at, first_seen_url, first_seen_snapshot_id, source_product_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING {_PRODUCT_COLUMNS}
+                RETURNING {PRODUCT_COLUMNS}
                 """,
                 [
                     normalized_key,
@@ -180,9 +180,8 @@ class Board:
             ).fetchone()
 
     def products(self) -> list[Product]:
-        """Všechny produkty v pořadí, jak byly poprvé viděny."""
         with self._cursor(Product) as cur:
-            return cur.execute(f"SELECT {_PRODUCT_COLUMNS} FROM products ORDER BY id").fetchall()
+            return cur.execute(f"SELECT {PRODUCT_COLUMNS} FROM products ORDER BY id").fetchall()
 
     def record_finding(
         self,
@@ -267,7 +266,7 @@ class Board:
     def record_outcome(
         self,
         conversation_id: uuid.UUID,
-        outcome: Literal["INFORM", "FAILURE"],
+        outcome: Literal[Kind.INFORM, Kind.FAILURE],
         *,
         new_findings: int | None = None,
         item_count: int | None = None,
