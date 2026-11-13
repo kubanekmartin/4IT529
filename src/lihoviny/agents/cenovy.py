@@ -210,8 +210,9 @@ def _parse_product(block: str, page_url: str) -> list[Offer]:
     if not (url and name):
         return []
     product = " ".join(html.unescape(name.group(1)).split())
-    # Odkaz na produkt jde na web do `href`: jiný než https na akcniceny.cz (třeba
-    # `javascript:`) by byl díra, proto nález dostane odkaz na stranu výpisu.
+    # Odkazy na produkt i leták jdou na web do `href`: jiný než https na akcniceny.cz (třeba
+    # `javascript:`) by byl díra. Místo odkazu na produkt pak nález dostane stranu výpisu,
+    # leták zůstane bez odkazu.
     product_url = _source_link(url.group(1)) or page_url
     offers = []
     for part in block.split(_OFFER)[1:]:
@@ -232,7 +233,7 @@ def _parse_product(block: str, page_url: str) -> list[Offer]:
                 discount_percent=int(discount.group(1)) if discount else None,
                 valid_from=_date_after("Platí od", part),
                 valid_until=_date_after("Platí do", part),
-                flyer_url=urljoin(BASE_URL, html.unescape(flyer.group(1))) if flyer else None,
+                flyer_url=_source_link(flyer.group(1)) if flyer else None,
             )
         )
     return offers
@@ -338,4 +339,5 @@ _SELLER = re.compile(r'itemprop="name"[^>]*?content="([^"]+)"')
 _PRICE = re.compile(r'itemprop="price" content="(\d+(?:\.\d+)?)"')
 _CARD = re.compile(r"<small[^>]*>([^<]+)</small>\s*([\d\s\xa0,]+)")
 _DISCOUNT = re.compile(r"-(\d+)<span>%")
-_FLYER = re.compile(r'href="(/letak/[^"]+)"')
+# Odkaz na leták relativní i celý; `_source_link` pak propustí jen https na akcniceny.cz.
+_FLYER = re.compile(r'href="([^"]*/letak/[^"]+)"')
