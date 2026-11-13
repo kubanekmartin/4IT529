@@ -14,6 +14,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
+| `/architektura` | agenti, jejich role a zdroje, diagram komunikace, druhy zpráv a sdílená tabule |
 
 ## Spuštění celého systému
 

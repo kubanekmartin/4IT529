@@ -7,7 +7,7 @@ a řádek v `PAGES` (odkaz v navigaci se přidá sám).
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 
-from lihoviny.web import akcni_ceny, behy, log, sortiment
+from lihoviny.web import akcni_ceny, architektura, behy, log, sortiment
 from lihoviny.web.common import templates
 
 # (router, cesta v navigaci, popisek v navigaci)
@@ -16,6 +16,7 @@ PAGES = [
     (akcni_ceny.router, "/akcni-ceny", "Akční ceny"),
     (log.router, "/log", "Log komunikace"),
     (behy.router, "/behy", "Běhy"),
+    (architektura.router, "/architektura", "Architektura"),
 ]
 
 
