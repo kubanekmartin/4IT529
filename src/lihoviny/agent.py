@@ -2,6 +2,9 @@
 
 Agent má jméno (adresa na sběrnici) a roli. Zadání (REQUEST) obslouží `handle_request`:
 vrácený slovník odejde odesílateli jako INFORM, vyhozená výjimka jako FAILURE s důvodem.
+Agent, který před odpovědí potřebuje ještě něco zjistit od jiného agenta (analytický agent
+čeká na odpovědi na své Dotazy), vrátí `ANSWER_LATER` a na Zadání odpoví později přes
+`answer()`, až zprávy, na které čekal, dostane v `handle_message`.
 Ostatní druhy zpráv dostane `handle_message`, kterou si agent přepíše podle své role.
 Práci podle času (rozvrh, limity) dělá `on_idle`, kterou smyčka volá v každém kole.
 """
@@ -9,6 +12,7 @@ Práci podle času (rozvrh, limity) dělá `on_idle`, kterou smyčka volá v ka�
 import logging
 import threading
 import time
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any, ClassVar, TypedDict
 
@@ -17,7 +21,7 @@ from lihoviny.bus import Bus, Kind, Message
 from lihoviny.clock import Clock
 from lihoviny.db import transaction
 from lihoviny.fetch import Fetcher
-from lihoviny.llm import Llm
+from lihoviny.llm import MAX_TOKENS, RETRIES, TIMEOUT, Llm
 
 log = logging.getLogger(__name__)
 
@@ -33,11 +37,23 @@ class OdpovedSberu(TypedDict):
     item_count: int
 
 
+class AnswerLater:
+    """Výsledek `handle_request`: odpověď na Zadání pošle agent později přes `answer()`."""
+
+
+ANSWER_LATER = AnswerLater()
+
+
 class Agent:
     name: ClassVar[str]
     role: ClassVar[str]
     # Pauza mezi požadavky na zdroj v sekundách: alespoň crawl-delay z robots.txt zdroje.
     fetch_delay: ClassVar[float] = 1.0
+    # Limity jednoho volání LLM (sekundy na pokus, opakování, tokeny odpovědi); psaní Briefu
+    # potřebuje víc, převod Dotazu méně (`lihoviny.planning`).
+    llm_timeout: ClassVar[float] = TIMEOUT
+    llm_retries: ClassVar[int] = RETRIES
+    llm_max_tokens: ClassVar[int] = MAX_TOKENS
 
     def __init__(self, *, bus: Bus, board: Board, fetcher: Fetcher, llm: Llm, clock: Clock):
         self.bus = bus
@@ -46,13 +62,25 @@ class Agent:
         self.llm = llm
         self.clock = clock
 
-    def handle_request(self, request: Message) -> dict[str, Any]:
+    def handle_request(self, request: Message) -> dict[str, Any] | AnswerLater:
         raise NotImplementedError
+
+    def answer(self, request: Message, work: Callable[[], dict[str, Any] | AnswerLater]) -> None:
+        """Odpoví na Zadání podle výsledku `work()`: slovník odejde jako INFORM, výjimka jako
+        FAILURE s důvodem, `ANSWER_LATER` zatím nic (agent pak zavolá `answer` znovu)."""
+        try:
+            result = work()
+        except Exception as error:
+            log.exception("%s: Zadání %s selhalo", self.name, request.id)
+            self.bus.reply(request, Kind.FAILURE, {"reason": str(error) or type(error).__name__})
+            return
+        if not isinstance(result, AnswerLater):
+            self.bus.reply(request, Kind.INFORM, result)
 
     def handle_message(self, message: Message) -> None:
         if message.kind is Kind.FAILURE:
-            # Řídicí agent uzavřel Zadání, na které agent do 30 minut neodpověděl. Na Selhání
-            # se neodpovídá; agent ho jen vezme na vědomí.
+            # Řídicí agent uzavřel Zadání, na které agent do termínu neodpověděl (30 minut,
+            # Zadání z Dotazu dřív). Na Selhání se neodpovídá; agent ho jen vezme na vědomí.
             log.info(
                 "%s: %s uzavřel Zadání v konverzaci %s jako Selhání (%s)",
                 self.name,
@@ -99,16 +127,10 @@ class Agent:
             log.exception("%s: práce podle času selhala", self.name)
 
     def _handle(self, message: Message) -> None:
-        if message.kind is not Kind.REQUEST:
-            try:
-                self.handle_message(message)
-            except Exception:
-                log.exception("%s: obsluha zprávy %s selhala", self.name, message.id)
+        if message.kind is Kind.REQUEST:
+            self.answer(message, lambda: self.handle_request(message))
             return
         try:
-            result = self.handle_request(message)
-        except Exception as error:
-            log.exception("%s: Zadání %s selhalo", self.name, message.id)
-            self.bus.reply(message, Kind.FAILURE, {"reason": str(error) or type(error).__name__})
-        else:
-            self.bus.reply(message, Kind.INFORM, result)
+            self.handle_message(message)
+        except Exception:
+            log.exception("%s: obsluha zprávy %s selhala", self.name, message.id)

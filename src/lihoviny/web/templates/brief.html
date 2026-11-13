@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Brief{% endblock %}
+
+{% block head %}
+<style>
+  /* Barvy řad v grafech (validované pro barvoslepost, světlý i tmavý režim). */
+  :root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; }
+  @media (prefers-color-scheme: dark) {
+    :root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; }
+  }
+  h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; }
+  h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
+  .gaps {
+    background: var(--surface); border: 1px solid var(--failure);
+    border-left-width: 4px; border-radius: 6px; padding: .75rem 1rem; margin: 1rem 0;
+  }
+  .gaps h2 { margin: 0 0 .25rem; font-size: 1.125rem; color: var(--failure); }
+  .gaps ul { margin: 0 0 .5rem; padding-left: 1.25rem; }
+  .gaps p { margin: 0; }
+  .kiq, .chart {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .75rem 1rem; margin: 0 0 .75rem;
+  }
+  .failure { color: var(--failure); font-weight: 600; margin: 0 0 .5rem; }
+  .no-data { color: var(--muted); margin: 0; }
+  .claims { margin: 0; padding-left: 1.25rem; }
+  .claims li + li { margin-top: .75rem; }
+  .claims p { margin: 0; }
+  .sources { font-size: .85rem; color: var(--muted); margin-top: .15rem; }
+  .tag {
+    display: inline-block; font-size: .75rem; font-weight: 600; padding: 0 .4rem;
+    border: 1px solid var(--accent); border-radius: 999px; color: var(--accent);
+  }
+  .older { border-left: 4px solid var(--query); padding-left: .75rem; }
+  .charts { display: grid; gap: .75rem; }
+  @media (min-width: 56rem) { .charts { grid-template-columns: 1fr 1fr; } }
+  .chart { margin: 0; min-width: 0; }
+  .chart figcaption { font-weight: 600; margin-bottom: .5rem; }
+  .graf { display: block; overflow: visible; }
+  .graf .label { fill: var(--text); }
+  .graf .value { fill: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .graf .tick { fill: var(--muted); font-size: 11px; }
+  .graf .grid { stroke: var(--border); }
+  .graf circle { stroke: var(--surface); }
+  .graf rect.s1, .graf circle.s1 { fill: var(--series-1); }
+  .graf rect.s2, .graf circle.s2 { fill: var(--series-2); }
+  .graf rect.s3, .graf circle.s3 { fill: var(--series-3); }
+  .graf rect.s4, .graf circle.s4 { fill: var(--series-4); }
+  .graf line.s1 { stroke: var(--series-1); }
+  .graf line.s2 { stroke: var(--series-2); }
+  .graf line.s3 { stroke: var(--series-3); }
+  .graf line.s4 { stroke: var(--series-4); }
+  .chart details { margin-top: .5rem; font-size: .875rem; }
+  .chart table { border-collapse: collapse; width: 100%; margin-top: .25rem; }
+  .chart th, .chart td { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid var(--border); }
+  .chart th { color: var(--muted); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro source_links(sources) %}
+<p class="sources">Zdroj:
+  {% for source in sources %}{% if source.url %}<a href="{{ source.url }}" rel="noopener">{{ source.label }}</a>{% else %}{{ source.label }}{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}
+</p>
+{% endmacro %}
+{% macro claim_list(claims) %}
+<ul class="claims">
+  {% for claim in claims %}
+  <li>
+    <p>{% for name in claim.competitors %}<span class="tag">{{ name }}</span> {% endfor %}{{ claim.text }}</p>
+    {{ source_links(claim.sources) }}
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% if brief %}
+<h1>Brief {{ brief.created_at | datum }}</h1>
+<p class="muted">
+  Nálezy od {{ brief.period_start | cas }} do {{ brief.created_at | cas }}{% if brief.beh_id %}, běh {{ brief.beh_id }}{% endif %}.
+  <a href="/brief/archiv">Archiv Briefů</a>
+</p>
+{% if not latest %}
+<p class="older">Starší Brief z archivu. <a href="/brief">Aktuální Brief</a></p>
+{% endif %}
+
+{% if brief.failures %}
+<section class="gaps" role="alert">
+  <h2>Selhání sběru</h2>
+  <ul>
+    {% for gap in brief.failures %}
+    <li>{% if gap.kiq %}<strong>KIQ {{ gap.kiq }}</strong> ({{ gap.agent }}): {% elif gap.agent %}<strong>{{ gap.agent }}</strong>: {% endif %}{{ gap.reason }}</li>
+    {% endfor %}
+  </ul>
+  <p>Co z těchto zdrojů chybí, neznamená, že se nic nestalo. Průběh sběru je na stránce <a href="/behy">Běhy</a>.</p>
+</section>
+{% endif %}
+
+<h2>Co se stalo podle KIQ</h2>
+{% for kiq in brief.what_happened %}
+<article class="kiq">
+  <h3>KIQ {{ kiq.kiq }} {{ kiq.name }}</h3>
+  {% if kiq.failure %}<p class="failure">Selhání sběru: {{ kiq.failure }}</p>{% endif %}
+  {% if kiq.no_data %}
+  <p class="no-data"><strong>bez dat</strong>: {{ kiq.no_data }}</p>
+  {% elif not kiq.claims %}
+  <p class="muted">Bez podstatné změny (nálezů za období: {{ kiq.finding_count }}).</p>
+  {% endif %}
+  {% if kiq.claims %}{{ claim_list(kiq.claims) }}{% endif %}
+</article>
+{% endfor %}
+
+<h2>Netypické nálezy</h2>
+{% if brief.unusual %}
+{{ claim_list(brief.unusual) }}
+{% else %}
+<p class="muted">Za období žádné.</p>
+{% endif %}
+
+<h2>Doporučení k portfoliu zadavatele</h2>
+{% if brief.recommendations %}
+<ul class="claims">
+  {% for item in brief.recommendations %}
+  <li>
+    <p><strong>{{ item.product_name }}</strong>: {{ item.text }}</p>
+    {{ source_links(item.sources) }}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">Bez nálezů za období Brief nic nedoporučuje.</p>
+{% endif %}
+
+<h2>Grafy</h2>
+<div class="charts">
+  {% for chart in brief.charts %}
+  <figure class="chart">
+    <figcaption>{{ chart.title }}</figcaption>
+    {{ chart.svg | safe }}
+    {% if chart.rows %}
+    <details>
+      <summary>Data grafu</summary>
+      <table>
+        <thead><tr>{% for column in chart.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in chart.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody>
+      </table>
+    </details>
+    {% endif %}
+  </figure>
+  {% endfor %}
+</div>
+{% else %}
+<h1>Brief</h1>
+<p>
+  Zatím žádný Brief. Analytický agent ho píše každé pondělí v 7:00 (pražský čas) nebo na ruční
+  pokyn řídicímu agentovi. Starší Briefy budou v <a href="/brief/archiv">archivu</a>.
+</p>
+{% endif %}
+{% endblock %}

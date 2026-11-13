@@ -236,6 +236,41 @@ def test_product_link_that_is_not_https_akcniceny_is_replaced_by_the_listing_pag
     assert {f.source_url for f in akcni_ceny(board, "Božkov Tradiční 35 % 0,5l")} == {page}
 
 
+@pytest.mark.parametrize(
+    ("href", "flyer_url"),
+    [
+        (
+            "https://www.akcniceny.cz/letak/lidl-198273/strana-1/",
+            "https://www.akcniceny.cz/letak/lidl-198273/strana-1/",
+        ),
+        ("https://podvodny.example/letak/lidl/", None),
+        ("http://www.akcniceny.cz/letak/lidl/", None),
+        ("javascript:alert(1)//letak/lidl/", None),
+    ],
+    ids=["https-akcniceny", "cizi-web", "bez-https", "javascript"],
+)
+def test_flyer_link_is_kept_only_when_it_is_https_akcniceny(
+    bus, board, clock, raw_dir, make_agent, href, flyer_url
+):
+    routes = source_routes()
+    routes[LISTING.format("tuzemak-rum")] = (
+        (FIXTURES / "tuzemak-rum.html")
+        .read_bytes()
+        .replace(b'href="/letak/lidl-198273/strana-1/#letPg2"', f'href="{href}"'.encode())
+    )
+    cenovy = make_cenovy(make_agent, clock, raw_dir, routes)
+    send_zadani(bus)
+
+    cenovy.process_pending()
+
+    (lidl,) = [
+        f
+        for f in akcni_ceny(board, "Božkov Original Tuzemský 37,5% 0,5l")
+        if f.content["chain"] == "Lidl"
+    ]
+    assert lidl.content["flyer_url"] == flyer_url
+
+
 def test_e_shop_offer_has_no_flyer(bus, board, clock, raw_dir, make_agent):
     cenovy = make_cenovy(make_agent, clock, raw_dir)
     send_zadani(bus)

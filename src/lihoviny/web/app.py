@@ -7,15 +7,28 @@ a řádek v `PAGES` (odkaz v navigaci se přidá sám).
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 
-from lihoviny.web import akcni_ceny, behy, log, sortiment
+from lihoviny.web import (
+    akcni_ceny,
+    architektura,
+    behy,
+    brief,
+    komunikace,
+    log,
+    regulace,
+    sortiment,
+)
 from lihoviny.web.common import templates
 
 # (router, cesta v navigaci, popisek v navigaci)
 PAGES = [
+    (brief.router, "/brief", "Brief"),
     (sortiment.router, "/sortiment", "Sortiment"),
     (akcni_ceny.router, "/akcni-ceny", "Akční ceny"),
+    (komunikace.router, "/komunikace", "Komunikace"),
+    (regulace.router, "/regulace", "Regulace"),
     (log.router, "/log", "Log komunikace"),
     (behy.router, "/behy", "Běhy"),
+    (architektura.router, "/architektura", "Architektura"),
 ]
 
 
@@ -33,7 +46,7 @@ def create_app(database_url: str) -> FastAPI:
 
     @app.get("/")
     def home():
-        return RedirectResponse("/log")
+        return RedirectResponse("/brief")
 
     for router, _, _ in PAGES:
         app.include_router(router)

@@ -23,10 +23,11 @@ from lihoviny.web.app import create_app
 
 class RidiciSNahrazkami(Ridici):
     sberni_agenti = ("sberny-a", "sberny-b")
+    analyticky_agent = None
 
 
 class RidiciSAnalytikem(RidiciSNahrazkami):
-    analyst = "analyticky"
+    analyticky_agent = "analyticky"
 
 
 class SbernyA(Agent):
@@ -99,12 +100,15 @@ def replies(bus, zadani):
 
 
 def test_ridici_is_registered_and_sends_zadani_only_to_registered_agents():
-    recipients = [*Ridici.sberni_agenti, *([Ridici.analyst] if Ridici.analyst else [])]
+    recipients = [
+        *Ridici.sberni_agenti,
+        *([Ridici.analyticky_agent] if Ridici.analyticky_agent else []),
+    ]
 
     assert AGENTS["ridici"] is Ridici
     assert [name for name in recipients if name not in AGENTS] == []
     assert "ozvena" not in Ridici.sberni_agenti
-    assert set(Ridici.sberni_agenti) == {"cenovy", "sortimentni"}
+    assert set(Ridici.sberni_agenti) == {"cenovy", "sortimentni", "medialni", "regulatorni"}
 
 
 def test_manual_beh_sends_zadani_to_every_sberny_agent_and_answers_with_the_beh(bus, make_agent):
@@ -252,6 +256,31 @@ def test_monday_brief_zadani_reaches_analyst_at_seven_with_results_of_the_collec
 
 
 @pytest.mark.parametrize(
+    "clock", [FakeClock(datetime(2026, 11, 16, 8, 0, tzinfo=UTC))], ids=["pondeli-9-00"]
+)
+def test_monday_brief_missed_with_the_collection_waits_until_the_collection_closes(
+    bus, clock, make_agent
+):
+    ridici = make_agent(RidiciSAnalytikem)  # v pondělí běží až od 9:00, oba termíny zmeškal
+    ridici.on_idle()
+    assert new_zadani(bus, "analyticky") == []
+
+    answer(bus, "sberny-a")
+    ridici.process_pending()
+    ridici.on_idle()
+    assert new_zadani(bus, "analyticky") == []  # sberny-b ještě sbírá
+
+    clock.advance(minutes=30)  # sberny-b mlčí: Selhání po 30 minutách uzavře sběr
+    ridici.on_idle()
+
+    [brief] = new_zadani(bus, "analyticky")
+    assert brief.content["collection"]["results"] == {
+        "sberny-a": {"outcome": "INFORM", "new_findings": 3, "item_count": 20},
+        "sberny-b": {"outcome": "FAILURE", "reason": "bez odpovědi do 30 minut"},
+    }
+
+
+@pytest.mark.parametrize(
     ("ridici_class", "clock"),
     [
         (RidiciSNahrazkami, FakeClock(datetime(2026, 11, 16, 6, 0, tzinfo=UTC))),
@@ -287,7 +316,7 @@ def test_manual_brief_beh_sends_zadani_to_analyst(bus, make_agent):
         (
             RidiciSNahrazkami,
             {"beh": "brief"},
-            "Brief nemá komu zadat: analytický agent zatím neexistuje",
+            "Brief nemá komu zadat: řídicí agent nemá analytického agenta",
         ),
         (
             RidiciSAnalytikem,

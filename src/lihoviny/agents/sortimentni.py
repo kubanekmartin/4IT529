@@ -43,6 +43,7 @@ from lihoviny.products import (
     plain_text,
     product_key,
 )
+from lihoviny.zadavatel import WATCHED_COMPETITORS
 
 log = logging.getLogger(__name__)
 
@@ -68,8 +69,6 @@ SKIPPED_SOURCE_CATEGORIES = {300122088}  # Nealkoholické nápoje
 # Lihovina má podle nařízení (EU) 2019/787 aspoň 15 % obj.; slabší nápoj mimo RTD je nejasný.
 SPIRIT_MIN_ABV = Decimal(15)
 SELLER_NOTE = "podle prodejce"
-# Názvy výrobců, které Brief řadí nahoru (GLOSSARY: Sledovaný konkurent).
-WATCHED_COMPETITORS = ["Stock", "Rudolf Jelínek", "Fruko-Schulz", "Jan Becher"]
 
 _NEXT_DATA = re.compile(r'<script[^>]*\bid="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL)
 

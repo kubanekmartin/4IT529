@@ -37,7 +37,8 @@
 <h1>Běhy</h1>
 <p class="muted">
   Řídicí agent zadává denní sběr v 6:00 a Brief v pondělí v 7:00 (pražský čas), nebo na ruční
-  pokyn. Za agenta, který do 30 minut neodpoví, zapíše Selhání.
+  pokyn. Za agenta, který do 30 minut neodpoví, zapíše Selhání. Dotaz analytického agenta
+  převede na Zadání z Dotazu v běhu Briefu; to musí odpovědět do 15 minut od Zadání Briefu.
 </p>
 
 {% if warnings %}
@@ -73,7 +74,7 @@
     <ul class="zadani-list">
       {% for view in item.zadani %}
       <li class="zadani {{ view.tone }}">
-        <span class="agent">{{ view.zadani.agent }}</span>
+        <span class="agent">{{ view.zadani.agent }}{% if view.zadani.dotaz_id %} <span class="muted">z Dotazu</span>{% endif %}</span>
         <span class="result">{{ view.result }}</span>
       </li>
       {% endfor %}

@@ -10,10 +10,15 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 
 | Stránka | Co |
 | --- | --- |
-| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
-| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
-| `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
+| `/brief` | aktuální Brief (na něj vede `/`), `/brief/archiv` starší Briefy |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny |
+| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s kategorií, cenou za litr a za litr etanolu |
+| `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
+| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím |
+| `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti |
+| `/log` | log komunikace agentů (tabulka zpráv sběrnice) po konverzacích |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
+| `/architektura` | agenti, jejich role a zdroje, diagram komunikace, druhy zpráv a sdílená tabule |
 
 ## Spuštění celého systému
 
@@ -22,7 +27,7 @@ cp .env.example .env                          # doplň hesla, např. openssl ran
 docker compose up --build                     # Postgres, migrace, web, agenti
 ```
 
-- Web: <http://127.0.0.1:8510/log> (port mění `WEB_HOST_PORT`, jen na `127.0.0.1`)
+- Web: <http://127.0.0.1:8510/> (port mění `WEB_HOST_PORT`, jen na `127.0.0.1`)
 - Postgres nemá port na hostiteli: `docker compose exec db psql -U lihoviny`
 
 Zadání diagnostickému agentovi Ozvěna:
@@ -73,7 +78,9 @@ Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin,
 nápoj…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
 akční cena: cena, případně cena s věrnostní kartou, sleva, platnost a odkaz na leták. Objem
 a obsah alkoholu čte z názvu produktu stejně jako sortimentní agent; z nich počítá cenu za
-litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM nepotřebuje:
+litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM potřebuje jen jako
+zálohu při párování (viz níže); bez `ANTHROPIC_API_KEY` akční ceny sbírá dál, jen jich víc
+zůstane nespárovaných:
 
 ```sh
 docker compose exec cenovy lihoviny zadani cenovy --cekat 180
@@ -85,12 +92,78 @@ a konec platnosti); každý snímek si pamatuje, které akční ceny obsahoval. 
 konce do jeho data, bez data konce, dokud je poslední snímek obsahuje. Odkaz na produkt se
 bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
 
+Párování akčních cen na produkty ze sortimentu (`src/lihoviny/pairing.py`) jde podle názvu
+u zdroje, takže všechny akční ceny se stejným názvem patří k jednomu produktu:
+
+- Normalizovaný klíč jako u sortimentního agenta (značka a název, objem, obsah alkoholu),
+  z názvu se jen vynechá objem. Když název obsah alkoholu neuvádí, stačí shoda názvu
+  a objemu s jediným produktem. Dárkové balení stejného objemu je týž produkt.
+- Zbytek posoudí LLM, ale jen u akčních cen s kandidáty: produkt téže značky se stejným
+  objemem a obsahem alkoholu (pokud je název uvádí). Akční cena na „vybrané druhy“ není
+  jeden produkt a zůstane nespárovaná. Odmítnuté dvojice si agent pamatuje (tabulka
+  `rejected_pairings`) a stejnou otázku LLM nepoloží znovu.
+- Při každém Zadání se párují nové i dřív nespárované akční ceny, takže akční cena se
+  spáruje i dodatečně, jakmile sortimentní agent produkt zapíše (obvykle o den později:
+  oba agenti běží v 6:00 současně). Rohlík ve výpisu ukazuje jen asi 14 produktů na
+  podkategorii, nespárovaných je proto zatím většina.
+- Spárovaná akční cena převezme z produktu obsah alkoholu (a objem, když ho název neuvádí)
+  a dopočítá cenu za litr etanolu. Web ukáže kategorii u akční ceny, akční ceny u produktu
+  na `/sortiment` a nespárované zvlášť na `/akcni-ceny/nesparovane`.
+
+### Mediální agent (KIQ 3, zboziaprodej.cz)
+
+Jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
+jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
+a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
+vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
+LLM žádný článek neposuzuje dvakrát. První snímek tak udělá nálezy ze všech asi 30 článků
+výpisu (zhruba dvou týdnů), další už jen z nových. Posouzený článek se zapíše hned; když LLM u některého
+článku selže, ostatní zůstanou zapsané a příští Zadání posoudí jen ty zbylé (Selhání je
+odpovědí, jen když LLM selže u všech). Potřebuje `ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec medialni lihoviny zadani medialni --cekat 600
+```
+
+Jména osob se neukládají: nález odkazuje na článek krátkým odkazem `?p=<ID>` (adresa se
+slugem opakuje titulek i se jmény), titulek a shrnutí píše LLM bez jmen a agent v nich jména,
+která LLM v článku našel, ještě nahradí slovem „[osoba]“. Články ukáže stránka
+<http://127.0.0.1:8510/komunikace>.
+
+### Regulatorní agent (KIQ 4, otevřená data Sněmovny)
+
+Stáhne dva archivy [otevřených dat Poslanecké sněmovny](https://www.psp.cz/sqw/hp.sqw?k=1300):
+sněmovní tisky (`tisky.zip`, asi 4 MB) a poslance s orgány (`poslanci.zip`, kvůli poslaneckým
+klubům). Zdroj je obnovuje jednou denně v noci a vždy s úplným stavem, takže agent stáhne
+každý jednou za Zadání. Bere tisky probíhajícího volebního období jen těch druhů, které
+navrhují pravidla (návrhy zákonů, rozpočet, mezinárodní smlouvy, akty EU); interpelace, žádosti
+o vydání poslance ke stíhání nebo návrhy na volbu regulací nejsou a jména nesou už v názvu.
+Nové tisky (které agent v dřívějším snímku neviděl) projdou filtrem klíčových slov v názvu
+(líh, alkohol, spotřební daň, reklama, prodej, značení, obaly, návykové látky, DPH…) a jen ty
+posoudí LLM: relevance pro výrobce lihovin, dopad a odhad termínu účinnosti. Posudky se
+zapisují po dávkách; tisk, který LLM neposoudil, zůstane nový pro příští Zadání. Potřebuje
+`ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec regulatorni lihoviny zadani regulatorni --cekat 300
+```
+
+Výchozí (první) snímek bere jako nové všechny tisky období, takže stránka
+<http://127.0.0.1:8510/regulace> hned ukáže projednávané tisky, které se lihovin týkají
+(označené „výchozí snímek“). Jména osob systém neukládá: navrhovatel je „vláda (min. financí)“,
+„skupina poslanců (ODS)“ (klub v den předložení) nebo „Senát“, jména z úplného názvu agent
+vypustí a tabulku osob nečte. Na disk místo archivů jde jen to, co agent z archivů přečetl
+(tisky bez jmen, kluby, ID osob), a otisk SHA-256 původního archivu. Podmínky otevřených dat
+chtějí uvést zdroj a datum zpracování; stránka je uvádí pod seznamem.
+
 ## Řídicí agent a běhy
 
 Řídicí agent (`ridici`) každý den v 6:00 pražského času pošle Zadání sběrným agentům
 z `Ridici.sberni_agenti` (`src/lihoviny/agents/ridici.py`) a v pondělí v 7:00 Zadání Briefu
-analytickému agentovi, jakmile bude zapsaný v `Ridici.analyst`. Za agenta, který do 30 minut
-neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den.
+analytickému agentovi z `Ridici.analyticky_agent` (`analyticky`). Za agenta, který do 30 minut
+neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den. Brief
+zadá, až je poslední sběr uzavřený (všichni odpověděli nebo jim vypršel termín), takže ani
+dohnané pondělí nepíše Brief bez dat ze sběru.
 
 Stránka <http://127.0.0.1:8510/behy> ukazuje poslední běhy a varování, když agent v posledním
 běhu selhal nebo vrátil prázdný snímek (0 položek). Počet nových nálezů je jen informace:
@@ -105,6 +178,61 @@ docker compose exec ridici lihoviny zadani ridici '{"beh": "brief"}'   # Brief
 Z GitHub Actions jde totéž přes workflow pro ruční Zadání (ticket Nasazení): příjemce `ridici`,
 obsah `{}` nebo `{"beh": "brief"}`. Odpověď řídicího agenta jen potvrdí zahájení běhu
 (číslo běhu a komu šlo Zadání); výsledky sběrných agentů jsou v logu a na stránce Běhy.
+
+### Smyčka Dotazů
+
+Když sběr některé KIQ v posledním běhu selhal nebo vrátil prázdný snímek, pošle analytický
+agent před psaním Briefu řídicímu agentovi Dotaz (`QUERY`): KIQ, co chybí a návrh doplňujícího
+sběru. Řídicí agent z něj udělá Zadání z Dotazu pro sběrného agenta té KIQ (text Zadání převede
+LLM s effortem `low`, model `LLM_MODEL_RIDICI`) a jeho výsledek pošle zpět jako odpověď na Dotaz.
+Po poslední odpovědi analytický agent Brief napíše; mezeru, kterou doplnění nezaplnilo, uvede
+i s důvodem. Sběrní agenti text instrukce ze Zadání z Dotazu záměrně nečtou a zopakují celý
+svůj sběr: mezeru vždy způsobil chybějící nebo prázdný snímek a nový snímek ji zaplní celou.
+Instrukce zůstává v logu komunikace jako doklad, o co analytický agent žádal.
+
+- Nejvýš 3 Dotazy na běh (jeden za KIQ, podle čísla KIQ) a jedno kolo: po první odpovědi
+  řídicí agent další Dotaz odmítne Selháním. Sběr, který ještě neodpověděl, se nezadává znovu.
+- Časový rozpočet (`src/lihoviny/planning.py`): 30 minut na Zadání Briefu platí i s Dotazy.
+  Převod Dotazu na Zadání trvá nejvýš 2 minuty (60 s, jedno opakování). Zadání z Dotazu musí
+  odpovědět do 15 minut od Zadání Briefu (jinak Selhání „bez odpovědi do 15 minut od Zadání
+  Briefu“), takže na napsání Briefu zbude 15 minut a jedno volání LLM trvá nejvýš 12. Termíny
+  řídicí agent kontroluje i mezi Dotazy a Dotaz, na který už čas nezbývá, odmítne.
+- Sběrný agent obsluhuje zprávy jednu po druhé: když ještě pracuje na dřívějším Zadání (třeba
+  na sběru, kterému už vypršel termín), Zadání z Dotazu čeká ve frontě a po 15 minutách
+  skončí Selháním. Brief pak mezeru uvede; nic se neblokuje.
+- Celá výměna má ID konverzace Zadání Briefu, takže ji <http://127.0.0.1:8510/log> ukáže
+  pohromadě; Zadání z Dotazu jsou na stránce Běhy v běhu Briefu s označením „z Dotazu“.
+- Ruční Zadání poslané analytickému agentovi přímo (ne přes `ridici`) vyjde bez Dotazů.
+
+## Analytický agent a Brief
+
+Na Zadání od řídicího agenta (pondělí 7:00 nebo ručně) analytický agent (`analyticky`) napíše
+ze sdílené tabule Brief za posledních 7 dní: Co se stalo podle KIQ, Netypické nálezy
+a Doporučení k portfoliu zadavatele, se čtyřmi grafy. Stránka <http://127.0.0.1:8510/brief>
+ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
+
+- Do období patří nálezy zjištěné za 7 dní a starší akční ceny, které snímek z týdne viděl
+  znovu (platí dál). Výrobce nálezu bere ze spárovaného produktu, z obsahu nálezu, jinak podle
+  značky na začátku názvu akční ceny (značky a výrobce zná z produktů sortimentního agenta).
+- Text píše LLM s effortem `high` (sběrní agenti `low`), jedno volání nejvýš 4 minuty na
+  pokus, celkem 12 minut, tedy uvnitř 15 minut, které po kole Dotazů zbudou z 30 minut
+  řídicího agenta. Model mění `LLM_MODEL_ANALYTICKY`.
+- Každé tvrzení odkazuje na zdroj nálezu. Tvrzení, které necituje žádný nález z promptu
+  pro LLM, agent vypustí; doporučení k produktu mimo portfolio také. Tvrzení jen o výrobcích mimo
+  sledované konkurenty přesune do Netypických nálezů, o sledovaných konkurentech dá nahoru.
+- KIQ bez nálezů Brief uvede jako „bez dat“. Selhání posledního sběru (z výsledků, které
+  řídicí agent přikládá k Zadání) zkusí doplnit Dotazem (viz Smyčka Dotazů); co se doplnit
+  nepodařilo, uvede v rámečku nahoře i u dotčené KIQ.
+- Grafy (akční ceny podle řetězce, akční ceny sledovaných konkurentů podle dne, cena za litr
+  etanolu portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
+  agent sám z nálezů a ukládá je s Briefem jako SVG; web je vloží bez JavaScriptu. Pod každým
+  grafem je tabulka s daty.
+- Portfolio zadavatele (návrh k odsouhlasení týmem) a sledovaní konkurenti jsou
+  v `src/lihoviny/zadavatel.toml`; sortimentní agent odtud bere jména konkurentů.
+
+```sh
+docker compose exec ridici lihoviny zadani ridici '{"beh": "brief"}'
+```
 
 ## Nasazení
 
@@ -168,11 +296,13 @@ docker buildx build --platform linux/arm64 .
 | `src/lihoviny/bus.py` | sběrnice zpráv (REQUEST = Zadání, INFORM, QUERY = Dotaz, FAILURE = Selhání) |
 | `src/lihoviny/agent.py` | společný základ agenta, obsah odpovědi sběrného agenta |
 | `src/lihoviny/agents/` | jednotliví agenti a jejich registr |
-| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty a běhy řídicího agenta se Zadáními |
+| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty, viděné sněmovní tisky, běhy řídicího agenta se Zadáními a Briefy |
 | `src/lihoviny/db.py` | připojení k Postgresu a transakce přes sběrnici i tabuli |
 | `src/lihoviny/products.py` | kategorie, normalizovaný klíč produktu, objem a obsah alkoholu z názvu |
+| `src/lihoviny/zadavatel.toml` | portfolio zadavatele a sledovaní konkurenti (načítá `zadavatel.py`) |
+| `src/lihoviny/charts.py` | grafy Briefu jako SVG |
 | `src/lihoviny/clock.py` | hodiny (skutečné a pro testy), pražský čas |
-| `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka |
+| `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka (na disk ukládá surová data, případně zmenšená bez jmen) |
 | `src/lihoviny/llm.py` | adaptér LLM (Claude API) a jeho náhražka |
 | `src/lihoviny/migrations/` | číslované migrace `NNNN_popis.sql` |
 | `src/lihoviny/web/` | web (FastAPI, šablony Jinja2) |
