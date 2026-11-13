@@ -461,6 +461,20 @@ def test_brief_without_any_findings_still_comes_out_without_asking_the_llm(
     assert html.count('<svg xmlns="http://www.w3.org/2000/svg" class="graf"') == 4
 
 
+def test_competitors_chart_says_bez_dat_when_no_snapshot_shows_a_watched_competitor(
+    bus, board, make_agent, web
+):
+    record_akcni_ceny(board, ("Becherovka 0,5l", "BILLA", 199.9, 25, 1052.11))
+    send_brief_zadani(bus, board)
+
+    make_agent(Analyticky, llm=FakeLlm(brief_text())).process_pending()
+
+    days = chart(web.get("/brief").text, "Akční ceny sledovaných konkurentů podle dne")
+    assert ">bez dat</text>" in days
+    assert "<circle" not in days
+    assert "<td>" not in days
+
+
 def test_web_says_so_when_no_brief_exists_yet(web):
     page = web.get("/brief")
 

@@ -118,9 +118,11 @@ def line_chart(
     series: Sequence[tuple[str, Sequence[float]]],
     fmt: Callable[[float], str],
 ) -> Chart:
-    """Čáry po bodech osy x (dny): `series` jsou (název řady, hodnota v každém bodu)."""
+    """Čáry po bodech osy x (dny): `series` jsou (název řady, hodnota v každém bodu).
+
+    Graf ze samých nul (žádná řada nemá v žádném bodu hodnotu) je „bez dat“ jako prázdný."""
     columns = [x_column, *(name for name, _ in series)]
-    if not x_labels or not series:
+    if not any(value for _, values in series for value in values):
         return _empty(title, columns)
     legend_rows = math.ceil(len(series) / 2)
     parts = [_legend([name for name, _ in series], per_row=2)]
