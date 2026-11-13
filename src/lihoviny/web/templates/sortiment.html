@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Sortiment{% endblock %}
+
+{% block head %}
+<style>
+  h2 { font-size: 1.2rem; margin: 1.75rem 0 .75rem; }
+  .items { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+  .item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .6rem .9rem; overflow-wrap: anywhere;
+  }
+  .item.novinka { border-left: 4px solid var(--accent); }
+  .item a { color: var(--text); font-weight: 600; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: .1rem .9rem; margin-top: .15rem;
+    font-size: .875rem; color: var(--muted);
+  }
+  .note {
+    display: inline-block; margin-left: .35rem; padding: 0 .45rem; border-radius: 999px;
+    border: 1px solid var(--accent); color: var(--accent); font-size: .75rem; font-weight: 600;
+    white-space: nowrap;
+  }
+  details.category {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    margin-bottom: .5rem;
+  }
+  details.category > summary {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding: .6rem .9rem; cursor: pointer; font-weight: 600; list-style: none;
+  }
+  details.category > summary::-webkit-details-marker { display: none; }
+  details.category > summary::before { content: "▸"; color: var(--muted); margin-right: .25rem; }
+  details.category[open] > summary::before { content: "▾"; }
+  details.category > summary .label { flex: 1; }
+  details.category[open] > summary { border-bottom: 1px solid var(--border); }
+  .count { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+  details.category .items { gap: 0; }
+  details.category .item { border: 0; border-radius: 0; border-bottom: 1px solid var(--border); }
+  details.category .item:last-child { border-bottom: 0; }
+  .empty { margin: 0; padding: .6rem .9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Sortiment</h1>
+<p class="muted">
+  KIQ 1: lihoviny na rohlik.cz podle kategorie a novinky konkurence.
+  {% if last_snapshot %}
+  Poslední snímek {{ last_snapshot.taken_at | cas }} ({{ last_snapshot.item_count }} produktů ve výpisu),
+  sledujeme {{ product_count }} produktů.
+  {% endif %}
+</p>
+
+<h2>Novinky</h2>
+{% if novinky %}
+<ol class="items">
+  {% for novinka in novinky %}
+  <li class="item novinka">
+    <a href="{{ novinka.source_url }}" rel="noreferrer">{{ novinka.name }}</a>
+    {% if novinka.note %}<span class="note">{{ novinka.note }}</span>{% endif %}
+    <div class="meta">
+      <span>{{ categories[novinka.category] }}</span>
+      <span>{{ novinka.brand }}{% if novinka.manufacturer %} · {{ novinka.manufacturer }}{% endif %}</span>
+      <span>{{ novinka.volume_ml | objem }} · {{ novinka.abv | procenta }}</span>
+      <time datetime="{{ novinka.found_at.isoformat() }}">zjištěno {{ novinka.found_at | datum }}</time>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p>Zatím žádné novinky.</p>
+{% endif %}
+
+<h2>Produkty podle kategorie</h2>
+{% if product_count %}
+{% for code, label in categories.items() %}
+{% set products = by_category[code] %}
+<details class="category">
+  <summary><span class="label">{{ label }}</span><span class="count">{{ products | length }}</span></summary>
+  {% if products %}
+  <ul class="items">
+    {% for product in products %}
+    <li class="item">
+      <a href="{{ product.first_seen_url }}" rel="noreferrer">{{ product.name }}</a>
+      <div class="meta">
+        <span>{{ product.brand }}{% if product.manufacturer %} · {{ product.manufacturer }}{% endif %}</span>
+        <span>{{ product.volume_ml | objem }} · {{ product.abv | procenta }}</span>
+        <time datetime="{{ product.first_seen_at.isoformat() }}">poprvé viděn {{ product.first_seen_at | datum }}</time>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty muted">V této kategorii zatím nic.</p>
+  {% endif %}
+</details>
+{% endfor %}
+{% else %}
+<p>Zatím žádné produkty. Sortimentní agent je zapíše po prvním snímku.</p>
+{% endif %}
+{% endblock %}
