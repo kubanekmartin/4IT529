@@ -26,6 +26,25 @@ docker compose exec ozvena lihoviny zadani ozvena '{"fail": "ukázka Selhání"}
 
 Příkaz vypíše Zadání i odpověď (INFORM, nebo FAILURE s důvodem) a obě zprávy se objeví v logu.
 
+## Řídicí agent a běhy
+
+Řídicí agent (`ridici`) každý den v 6:00 pražského času pošle Zadání sběrným agentům
+z `Ridici.collectors` (`src/lihoviny/agents/ridici.py`) a v pondělí v 7:00 Zadání Briefu
+analytickému agentovi, jakmile bude zapsaný v `Ridici.analyst`. Za agenta, který do 30 minut
+neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den.
+
+Stránka <http://127.0.0.1:8510/behy> ukazuje poslední běhy a varování, když agent v posledním
+běhu selhal nebo vrátil 0 nálezů. Ruční běh:
+
+```sh
+docker compose exec ridici lihoviny zadani ridici                      # denní sběr
+docker compose exec ridici lihoviny zadani ridici '{"run": "brief"}'   # Brief
+```
+
+Z GitHub Actions jde totéž přes workflow pro ruční Zadání (ticket Nasazení): příjemce `ridici`,
+obsah `{}` nebo `{"run": "brief"}`. Odpověď řídicího agenta jen potvrdí zahájení běhu
+(číslo běhu a komu šlo Zadání); výsledky sběrných agentů jsou v logu a na stránce Běhy.
+
 ## Nasazení
 
 Web běží na <https://lihoviny.kubanekmartin.cz/log> (Oracle VM, hostitelský nginx s Let's Encrypt
