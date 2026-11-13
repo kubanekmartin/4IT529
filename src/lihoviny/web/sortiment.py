@@ -1,4 +1,8 @@
-"""Stránka Sortiment (KIQ 1): Novinky konkurence a produkty podle deseti kategorií."""
+"""Stránka Sortiment (KIQ 1): Novinky konkurence a produkty podle deseti kategorií.
+
+U produktu jsou jeho akční ceny platné k poslednímu snímku cenového agenta (spárované
+akční ceny, viz `lihoviny.pairing`), takže Novinka, kategorie a akční cena jsou pohromadě.
+"""
 
 from typing import Annotated
 
@@ -8,6 +12,7 @@ from psycopg.rows import class_row, dict_row
 
 from lihoviny.board import PRODUCT_COLUMNS, Product
 from lihoviny.products import CATEGORIES
+from lihoviny.web.akcni_ceny import current_offers
 from lihoviny.web.common import db, templates
 
 router = APIRouter()
@@ -19,7 +24,8 @@ def sortiment_page(request: Request, conn: Annotated[psycopg.Connection, Depends
         novinky = cursor.execute(
             """
             SELECT f.found_at, f.source_url, f.content ->> 'note' AS note,
-                   p.name, p.brand, p.manufacturer, p.category, p.volume_ml, p.abv
+                   p.id AS product_id, p.name, p.brand, p.manufacturer, p.category,
+                   p.volume_ml, p.abv
             FROM findings f JOIN products p ON p.id = f.product_id
             WHERE f.kiq = 1 AND f.type = 'novinka'
             ORDER BY f.found_at DESC, f.id DESC
@@ -39,12 +45,19 @@ def sortiment_page(request: Request, conn: Annotated[psycopg.Connection, Depends
     by_category: dict[str, list[Product]] = {code: [] for code in CATEGORIES}
     for product in products:
         by_category[product.category].append(product)
+    offers_by_product: dict[int, list[dict]] = {}
+    for offer in current_offers(conn)[1]:
+        if offer["product_id"] is not None:
+            offers_by_product.setdefault(offer["product_id"], []).append(offer)
+    for offers in offers_by_product.values():
+        offers.sort(key=lambda o: o["content"]["price"])  # u produktu nejlevnější nahoře
     return templates.TemplateResponse(
         request,
         "sortiment.html",
         {
             "novinky": novinky,
             "by_category": by_category,
+            "offers_by_product": offers_by_product,
             "categories": CATEGORIES,
             "product_count": len(products),
             "last_snapshot": last_snapshot,

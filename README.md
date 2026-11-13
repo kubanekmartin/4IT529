@@ -10,8 +10,9 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 
 | Stránka | Co |
 | --- | --- |
-| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
-| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny |
+| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s kategorií, cenou za litr a za litr etanolu |
+| `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
 
@@ -73,7 +74,9 @@ Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin,
 nápoj…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
 akční cena: cena, případně cena s věrnostní kartou, sleva, platnost a odkaz na leták. Objem
 a obsah alkoholu čte z názvu produktu stejně jako sortimentní agent; z nich počítá cenu za
-litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM nepotřebuje:
+litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM potřebuje jen jako
+zálohu při párování (viz níže); bez `ANTHROPIC_API_KEY` akční ceny sbírá dál, jen jich víc
+zůstane nespárovaných:
 
 ```sh
 docker compose exec cenovy lihoviny zadani cenovy --cekat 180
@@ -84,6 +87,24 @@ a konec platnosti); každý snímek si pamatuje, které akční ceny obsahoval. 
 <http://127.0.0.1:8510/akcni-ceny> ukazuje akční ceny platné k poslednímu snímku: s datem
 konce do jeho data, bez data konce, dokud je poslední snímek obsahuje. Odkaz na produkt se
 bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
+
+Párování akčních cen na produkty ze sortimentu (`src/lihoviny/pairing.py`) jde podle názvu
+u zdroje, takže všechny akční ceny se stejným názvem patří k jednomu produktu:
+
+- Normalizovaný klíč jako u sortimentního agenta (značka a název, objem, obsah alkoholu),
+  z názvu se jen vynechá objem. Když název obsah alkoholu neuvádí, stačí shoda názvu
+  a objemu s jediným produktem. Dárkové balení stejného objemu je týž produkt.
+- Zbytek posoudí LLM, ale jen u akčních cen s kandidáty: produkt téže značky se stejným
+  objemem a obsahem alkoholu (pokud je název uvádí). Akční cena na „vybrané druhy“ není
+  jeden produkt a zůstane nespárovaná. Odmítnuté dvojice si agent pamatuje (tabulka
+  `rejected_pairings`) a stejnou otázku LLM nepoloží znovu.
+- Při každém Zadání se párují nové i dřív nespárované akční ceny, takže akční cena se
+  spáruje i dodatečně, jakmile sortimentní agent produkt zapíše (obvykle o den později:
+  oba agenti běží v 6:00 současně). Rohlík ve výpisu ukazuje jen asi 14 produktů na
+  podkategorii, nespárovaných je proto zatím většina.
+- Spárovaná akční cena převezme z produktu obsah alkoholu (a objem, když ho název neuvádí)
+  a dopočítá cenu za litr etanolu. Web ukáže kategorii u akční ceny, akční ceny u produktu
+  na `/sortiment` a nespárované zvlášť na `/akcni-ceny/nesparovane`.
 
 ## Řídicí agent a běhy
 

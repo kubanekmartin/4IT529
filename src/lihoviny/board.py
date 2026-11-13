@@ -2,13 +2,14 @@
 
 Sběrný agent po stažení zdroje zapíše jeden snímek (odkazuje na surová data na disku)
 a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady. Produkty zapisuje
-sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat.
+sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat. Cenový
+agent akční cenu spáruje s produktem i dodatečně (`record_pairing`), jakmile produkt přibude.
 
 Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání a jak každé dopadlo.
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -225,6 +226,32 @@ class Board:
                 """,
                 {"kiq": kiq, "snapshot_id": snapshot_id},
             ).fetchall()
+
+    def record_pairing(self, finding_id: int, *, product_id: int, content: dict[str, Any]) -> None:
+        """Spáruje dřívější nespárovaný nález s produktem; obsah nahradí doplněným."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                UPDATE findings SET product_id = %s, content = %s
+                WHERE id = %s AND product_id IS NULL
+                """,
+                [product_id, Jsonb(content), finding_id],
+            )
+
+    def rejected_pairings(self) -> set[tuple[str, int]]:
+        """Dvojice (název akční ceny, ID produktu), které LLM posoudil jako různé produkty."""
+        with self._cursor() as cur:
+            return set(cur.execute("SELECT offer_name, product_id FROM rejected_pairings"))
+
+    def record_rejected_pairings(self, pairs: Iterable[tuple[str, int]]) -> None:
+        with self._cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO rejected_pairings (offer_name, product_id) VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                list(pairs),
+            )
 
     def record_snapshot_findings(self, snapshot_id: int, finding_ids: Sequence[int]) -> None:
         """Zapíše, které nálezy (i dřívější) snímek u zdroje znovu viděl."""

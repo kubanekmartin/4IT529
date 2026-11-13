@@ -97,6 +97,7 @@ services:
     command: ["lihoviny", "agent", "cenovy"]
     environment:
       <<: *agent-env
+      LLM_MODEL_CENOVY: ${LLM_MODEL_CENOVY:-}
     volumes:
       - rawdata:/data/raw
 
