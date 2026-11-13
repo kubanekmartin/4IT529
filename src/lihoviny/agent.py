@@ -50,6 +50,17 @@ class Agent:
         raise NotImplementedError
 
     def handle_message(self, message: Message) -> None:
+        if message.kind is Kind.FAILURE:
+            # Řídicí agent uzavřel Zadání, na které agent do 30 minut neodpověděl. Na Selhání
+            # se neodpovídá; agent ho jen vezme na vědomí.
+            log.info(
+                "%s: %s uzavřel Zadání v konverzaci %s jako Selhání (%s)",
+                self.name,
+                message.sender,
+                message.conversation_id,
+                message.content.get("reason", "bez důvodu"),
+            )
+            return
         log.info("%s: zpráva %s od %s nemá obsluhu", self.name, message.kind, message.sender)
 
     def on_idle(self) -> None:

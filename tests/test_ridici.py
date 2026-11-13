@@ -5,6 +5,7 @@ do `Ridici.sberni_agenti`. Čas posouvá `FakeClock`, takže limit 30 minut se n
 Výsledek běhů (dokončen, varování) se kontroluje přes HTTP na stránce Běhy.
 """
 
+import logging
 import time
 from datetime import UTC, datetime
 
@@ -145,6 +146,27 @@ def test_silent_sberny_agent_gets_selhani_after_30_minutes_and_answering_one_doe
         (Kind.FAILURE, "ridici", "sberny-b", {"reason": "bez odpovědi do 30 minut"})
     ]
     assert [kind for kind, *_ in replies(bus, answered)] == [Kind.INFORM]
+
+
+def test_sberny_agent_back_after_selhani_closes_it_quietly(bus, board, clock, make_agent, caplog):
+    ridici = make_agent(RidiciSNahrazkami)
+    request = start_manual_beh(bus)
+    ridici.process_pending()
+    beh_id = bus.conversation(request.conversation_id)[-1].content["beh_id"]
+    clock.advance(minutes=30)  # sberny-a celou dobu neběžel
+    ridici.on_idle()
+    caplog.set_level(logging.INFO)
+
+    make_agent(SbernyA).process_pending()  # vyzvedne Zadání i Selhání od řídicího agenta
+
+    (zadani,) = [z for z in board.zadani(beh_id) if z.agent == "sberny-a"]
+    assert [m.kind for m in bus.conversation(zadani.conversation_id)] == [
+        Kind.REQUEST,
+        Kind.FAILURE,  # řídicí agent po 30 minutách
+        Kind.INFORM,  # opožděná odpověď na Zadání, na Selhání se neodpovídá
+    ]
+    assert "nemá obsluhu" not in caplog.text
+    assert [r.levelname for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 @pytest.mark.parametrize(
