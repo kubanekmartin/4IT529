@@ -160,7 +160,9 @@ chtějí uvést zdroj a datum zpracování; stránka je uvádí pod seznamem.
 Řídicí agent (`ridici`) každý den v 6:00 pražského času pošle Zadání sběrným agentům
 z `Ridici.sberni_agenti` (`src/lihoviny/agents/ridici.py`) a v pondělí v 7:00 Zadání Briefu
 analytickému agentovi z `Ridici.analyst` (`analyticky`). Za agenta, který do 30 minut
-neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den.
+neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den. Brief
+zadá, až je poslední sběr uzavřený (všichni odpověděli nebo jim vypršel termín), takže ani
+dohnané pondělí nepíše Brief bez dat ze sběru.
 
 Stránka <http://127.0.0.1:8510/behy> ukazuje poslední běhy a varování, když agent v posledním
 běhu selhal nebo vrátil prázdný snímek (0 položek). Počet nových nálezů je jen informace:

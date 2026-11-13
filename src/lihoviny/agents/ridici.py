@@ -248,21 +248,28 @@ class Ridici(Agent):
         self.bus.reply(dotaz, Kind(zadani.outcome), content)
 
     def on_idle(self) -> None:
-        self._check_schedule()
+        # Nejdřív Selhání po termínu: uzavřený sběr pak pustí Brief ještě v témže kole.
         self._fail_overdue()
+        self._check_schedule()
 
     def _check_schedule(self) -> None:
         """Termín z rozvrhu, který dnes už nastal a ještě neproběhl, spustí (i se zpožděním).
 
-        Zmeškaný termín se dožene jen týž den, aby restart nespustil včerejší běh.
+        Zmeškaný termín se dožene jen týž den, aby restart nespustil včerejší běh. Brief
+        počká, až je poslední sběr uzavřený (všechny odpovědi nebo Selhání po termínu): po
+        zmeškaném pondělním ránu by jinak vyšel současně se sběrem a bez jeho dat.
         """
         now = self.clock.now().astimezone(PRAGUE)
         collection = datetime.combine(now.date(), COLLECTION_AT, tzinfo=PRAGUE)
         if now >= collection:
             self._start_collection(scheduled_for=collection)
         brief = datetime.combine(now.date(), BRIEF_AT, tzinfo=PRAGUE)
-        if self.analyst and now.weekday() == MONDAY and now >= brief:
+        if self.analyst and now.weekday() == MONDAY and now >= brief and self._collection_closed():
             self._start_brief(scheduled_for=brief)
+
+    def _collection_closed(self) -> bool:
+        beh = self.board.latest_beh("collection")
+        return beh is None or all(z.outcome is not None for z in self.board.zadani(beh.id))
 
     def _fail_overdue(self) -> None:
         """Za Zadání po termínu zapíše Selhání a pošle ho agentovi; u Zadání z Dotazu
