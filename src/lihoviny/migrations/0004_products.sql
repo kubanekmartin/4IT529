@@ -1,7 +1,7 @@
 -- Produkty (KIQ 1): konkrétní balení lihoviny, jak ho poprvé viděl sortimentní agent.
 -- Normalizovaný klíč spojuje značku a název (bez obsahu alkoholu a slov o dárkovém balení),
 -- objem a obsah alkoholu, takže dárkové balení stejného objemu je týž produkt
--- (`lihoviny.products.product_key`). Podle klíče páruje akce i cenový agent.
+-- (`lihoviny.products.product_key`).
 CREATE TABLE products (
     id                     bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     normalized_key         text          NOT NULL UNIQUE,

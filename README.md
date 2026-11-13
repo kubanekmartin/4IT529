@@ -5,7 +5,15 @@ Studijní prototyp multiagentního systému pro konkurenční zpravodajství na 
 v `KIT-KIQ.md`.
 
 Agenti běží jako samostatné služby se společným Docker image a mluví spolu jen zprávami
-přes Postgres (ADR 0001). Web ukazuje log jejich komunikace.
+přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Postgresu. Web jen
+čte (role bez práva zápisu) a ukazuje:
+
+| Stránka | Co |
+| --- | --- |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
+| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
+| `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
+| `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
 
 ## Spuštění celého systému
 
@@ -26,14 +34,56 @@ docker compose exec ozvena lihoviny zadani ozvena '{"fail": "ukázka Selhání"}
 
 Příkaz vypíše Zadání i odpověď (INFORM, nebo FAILURE s důvodem) a obě zprávy se objeví v logu.
 
-Sortimentní agent stáhne kategorii Lihoviny z rohlik.cz (asi 13 stránek po 5 s) a nové
-produkty zařadí přes LLM, takže potřebuje `ANTHROPIC_API_KEY` v `.env` a delší čekání:
+## Sběrní agenti
+
+Sběrný agent na Zadání stáhne zdroj, zapíše na tabuli jeden snímek (odkazy na surové stránky
+uložené na disku) a k němu nálezy, vše v jedné transakci. Odpoví INFORM jen s přehledem
+`{"snapshot_id", "new_findings", "item_count"}`; samotné nálezy jsou na tabuli. Chyba zdroje
+(po třech pokusech) nebo stránka, ze které nic nevyčte, je Selhání a tabule zůstane beze změny.
+
+### Sortimentní agent (KIQ 1, rohlik.cz)
+
+Stáhne kategorii Lihoviny a její podkategorie (asi 13 stránek po 5 s) a data čte
+z `__NEXT_DATA__` stránky. Kategorii bere z podkategorie u zdroje; LLM rozhoduje jen nejasné
+případy a určí výrobce nové značky, takže agent potřebuje `ANTHROPIC_API_KEY` v `.env`:
 
 ```sh
 docker compose exec sortimentni lihoviny zadani sortimentni --cekat 600
 ```
 
 Produkty a Novinky pak ukáže stránka <http://127.0.0.1:8510/sortiment>.
+
+Jak agent pozná Novinku (pojem v `GLOSSARY.md`: produkt, který se u zdroje objevil poprvé od
+začátku sledování):
+
+- Výchozí (první) snímek hlásí jen produkty se štítkem prodejce „Novinka“, s poznámkou
+  „podle prodejce“. Ostatní produkty jsou výchozí stav.
+- V dalších snímcích je Novinkou produkt, který ještě není v tabulce produktů **a** má ID
+  u Rohlíku vyšší než nejvyšší ID mezi produkty výchozího snímku.
+- Proč ta hranice ID: stránka podkategorie nese jen prvních asi 14 produktů (zbytek Rohlík
+  dočítá až v prohlížeči), takže se do výpisu může kdykoli dostat produkt, který u zdroje
+  je dávno. Rohlík přiděluje ID postupně, nízké ID tedy prozradí produkt, který byl u zdroje
+  už před začátkem sledování; Novinkou není, ani se štítkem prodejce.
+- Vyprodaný a vrácený produkt už v tabulce je, takže Novinkou není. Dárkové balení stejného
+  objemu má stejný klíč (`lihoviny.products.product_key`), je to týž produkt.
+
+### Cenový agent (KIQ 2, akcniceny.cz)
+
+Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin, likéry, míchaný
+nápoj…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
+akční cena: cena, případně cena s věrnostní kartou, sleva, platnost a odkaz na leták. Objem
+a obsah alkoholu čte z názvu produktu stejně jako sortimentní agent; z nich počítá cenu za
+litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM nepotřebuje:
+
+```sh
+docker compose exec cenovy lihoviny zadani cenovy --cekat 180
+```
+
+Nález vznikne jen u akční ceny, která na tabuli ještě není (stejný produkt, řetězec, ceny
+a konec platnosti); každý snímek si pamatuje, které akční ceny obsahoval. Stránka
+<http://127.0.0.1:8510/akcni-ceny> ukazuje akční ceny platné k poslednímu snímku: s datem
+konce do jeho data, bez data konce, dokud je poslední snímek obsahuje. Odkaz na produkt se
+bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
 
 ## Řídicí agent a běhy
 
@@ -103,14 +153,25 @@ Testy nevolají živé weby ani placené API: stahování nahrazuje `FakeFetcher
 stránek z `tests/fixtures/`, LLM nahrazuje `FakeLlm` s připravenými odpověďmi a čas
 `FakeClock`.
 
+CI (`.github/workflows/ci.yml`) sestaví Docker image jen pro amd64 (arm64 by na runneru
+šel jen přes pomalou emulaci). Server je arm64 (Oracle VM, aarch64) a image si při nasazení
+sestavuje sám; před změnou `Dockerfile` nebo závislostí to ověř lokálně:
+
+```sh
+docker buildx build --platform linux/arm64 .
+```
+
 ## Struktura
 
 | Kde | Co |
 | --- | --- |
 | `src/lihoviny/bus.py` | sběrnice zpráv (REQUEST = Zadání, INFORM, QUERY = Dotaz, FAILURE = Selhání) |
-| `src/lihoviny/agent.py` | společný základ agenta |
+| `src/lihoviny/agent.py` | společný základ agenta, obsah odpovědi sběrného agenta |
 | `src/lihoviny/agents/` | jednotliví agenti a jejich registr |
-| `src/lihoviny/board.py` | sdílená tabule: snímky a nálezy |
+| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty a běhy řídicího agenta se Zadáními |
+| `src/lihoviny/db.py` | připojení k Postgresu a transakce přes sběrnici i tabuli |
+| `src/lihoviny/products.py` | kategorie, normalizovaný klíč produktu, objem a obsah alkoholu z názvu |
+| `src/lihoviny/clock.py` | hodiny (skutečné a pro testy), pražský čas |
 | `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka |
 | `src/lihoviny/llm.py` | adaptér LLM (Claude API) a jeho náhražka |
 | `src/lihoviny/migrations/` | číslované migrace `NNNN_popis.sql` |
