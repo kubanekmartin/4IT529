@@ -24,6 +24,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from lihoviny.agent import Agent, OdpovedSberu
+from lihoviny.board import Snapshot
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchResult
 from lihoviny.zadavatel import WATCHED_COMPETITORS
@@ -117,44 +118,66 @@ class Medialni(Agent):
         page = self.fetcher.get(POSTS_URL, minimize=_without_texts)
         articles = _parse_articles(page)
         seen = self.board.article_ids(source=SOURCE)
-        # LLM posoudí nové články dřív, než se cokoli zapíše: jeho chyba nechá tabuli beze změny.
-        assessed = [
-            (article, self._assess(article)) for article in articles if article.id not in seen
-        ]
+        new = [article for article in articles if article.id not in seen]
 
+        # Každý posouzený článek se zapíše hned ve vlastní transakci: chyba LLM u jednoho
+        # článku nezahodí ostatní a příští Zadání posoudí jen články, které zůstaly.
+        # Snímek vznikne s prvním zápisem, takže když LLM selže u všech, tabule zůstane beze
+        # změny a odpovědí je Selhání.
+        snapshot = None
         new_findings = 0
-        with self.transaction():
-            snapshot = self.board.record_snapshot(
-                agent=self.name, source=SOURCE, fetches=[page], item_count=len(articles)
-            )
-            for article, assessment in assessed:
-                finding_id = None
-                if assessment.relevant:
-                    finding_id = self.board.record_finding(
-                        kiq=3,
-                        agent=self.name,
-                        type="clanek",
-                        snapshot_id=snapshot.id,
-                        source_url=f"{BASE_URL}/?p={article.id}",
-                        content=_finding_content(article, assessment),
-                    ).id
-                    new_findings += 1
-                self.board.record_article(
-                    source=SOURCE,
-                    source_article_id=article.id,
-                    first_seen_snapshot_id=snapshot.id,
-                    finding_id=finding_id,
-                )
+        errors: list[Exception] = []
+        for article in new:
+            try:
+                assessment = self._assess(article)
+            except Exception as error:
+                log.warning("článek %s: posouzení LLM selhalo (%s)", article.id, error)
+                errors.append(error)
+                continue
+            with self.transaction():
+                snapshot = snapshot or self._record_snapshot(page, len(articles))
+                new_findings += self._record_article(snapshot.id, article, assessment)
+        if errors and len(errors) == len(new):
+            raise errors[0]
+        if snapshot is None:
+            with self.transaction():
+                snapshot = self._record_snapshot(page, len(articles))
         log.info(
-            "snímek %s: %s článků, %s posouzeno, %s o lihovinách",
+            "snímek %s: %s článků, %s posouzeno, %s nepodařilo posoudit, %s o lihovinách",
             snapshot.id,
             len(articles),
-            len(assessed),
+            len(new) - len(errors),
+            len(errors),
             new_findings,
         )
         return OdpovedSberu(
             snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(articles)
         )
+
+    def _record_snapshot(self, page: FetchResult, item_count: int) -> Snapshot:
+        return self.board.record_snapshot(
+            agent=self.name, source=SOURCE, fetches=[page], item_count=item_count
+        )
+
+    def _record_article(self, snapshot_id: int, article: Article, assessment: Assessment) -> int:
+        """Zapíše posouzený článek (a z relevantního nález); vrátí počet nových nálezů."""
+        finding_id = None
+        if assessment.relevant:
+            finding_id = self.board.record_finding(
+                kiq=3,
+                agent=self.name,
+                type="clanek",
+                snapshot_id=snapshot_id,
+                source_url=f"{BASE_URL}/?p={article.id}",
+                content=_finding_content(article, assessment),
+            ).id
+        self.board.record_article(
+            source=SOURCE,
+            source_article_id=article.id,
+            first_seen_snapshot_id=snapshot_id,
+            finding_id=finding_id,
+        )
+        return 0 if finding_id is None else 1
 
     def _assess(self, article: Article) -> Assessment:
         return self.llm.ask(

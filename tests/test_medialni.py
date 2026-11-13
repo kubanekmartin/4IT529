@@ -259,25 +259,42 @@ class RefusesSecondArticle(FakeLlm):
         return super().ask(prompt, schema, effort=effort, system=system)
 
 
-def test_llm_failure_keeps_board_untouched_so_next_zadani_assesses_all_again(
+class AlwaysRefuses(FakeLlm):
+    def ask(self, prompt, schema, *, effort, system=""):
+        raise LlmError("model odmítl odpovědět (refusal, kategorie None)")
+
+
+def test_llm_failure_on_one_clanek_keeps_the_others_and_next_zadani_assesses_only_it(
     bus, board, clock, raw_dir, make_agent
 ):
     fetcher = FakeFetcher({POSTS_URL: FIXTURES / "clanky-den1.json"}, raw_dir=raw_dir, clock=clock)
     refusing = make_agent(Medialni, fetcher=fetcher, llm=RefusesSecondArticle(STOCK_MODERNIZUJE))
-    failed = send_zadani(bus)
+    first = send_zadani(bus)
     refusing.process_pending()
 
-    reply = bus.conversation(failed.conversation_id)[-1]
-    assert reply.kind is Kind.FAILURE
-    assert "refusal" in reply.content["reason"]
-    assert board.snapshots(agent="medialni") == []
-    assert board.findings(kiq=3) == []
+    reply = bus.conversation(first.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    assert (reply.content["new_findings"], reply.content["item_count"]) == (1, 2)
+    assert len(board.findings(kiq=3)) == 1
 
-    medialni, llm = make_medialni(
-        make_agent, clock, raw_dir, "clanky-den1.json", STOCK_MODERNIZUJE, irrelevant()
-    )
+    medialni, llm = make_medialni(make_agent, clock, raw_dir, "clanky-den1.json", irrelevant())
     retried = send_zadani(bus)
     medialni.process_pending()
 
-    assert bus.conversation(retried.conversation_id)[-1].content["new_findings"] == 1
-    assert len(llm.calls) == 2
+    assert bus.conversation(retried.conversation_id)[-1].content["new_findings"] == 0
+    assert len(llm.calls) == 1  # jen článek, který minule LLM neposoudil
+
+
+def test_llm_failure_on_every_clanek_is_failure_and_board_stays_empty(
+    bus, board, clock, raw_dir, make_agent
+):
+    fetcher = FakeFetcher({POSTS_URL: FIXTURES / "clanky-den1.json"}, raw_dir=raw_dir, clock=clock)
+    medialni = make_agent(Medialni, fetcher=fetcher, llm=AlwaysRefuses())
+    zadani = send_zadani(bus)
+
+    medialni.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.FAILURE
+    assert "refusal" in reply.content["reason"]
+    assert board.snapshots(agent="medialni") == []

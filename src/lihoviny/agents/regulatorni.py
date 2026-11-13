@@ -7,10 +7,12 @@ při denním sběru tedy dvě stažení denně.
 
 Bere tisky aktuálního volebního období jen těch druhů, které navrhují pravidla (návrhy zákonů,
 rozpočet, smlouvy, akty EU); interpelace, žádosti o vydání poslance ke stíhání a podobné tisky
-regulací nejsou a jména nesou už v názvu. Nový je tisk, který agent ještě neviděl v žádném dřívějším snímku;
-v prvním snímku jsou nové všechny tisky období (nález pak má `baseline: true`). Nové tisky
-projdou filtrem klíčových slov v názvu a teprve ty, které jím projdou, posoudí LLM: zda se
-týkají výrobců lihovin, jaký mají dopad a odkdy mají platit. Nález vznikne jen u relevantního.
+regulací nejsou a jména nesou už v názvu. Nový je tisk, který agent ještě neviděl v žádném
+dřívějším snímku; v prvním snímku jsou nové všechny tisky období (nález pak má
+`baseline: true`). Nové tisky projdou filtrem klíčových slov v názvu a teprve ty, které jím
+projdou, posoudí LLM: zda se týkají výrobců lihovin, jaký mají dopad a odkdy mají platit.
+Nález vznikne jen u relevantního. Posudky se zapisují po dávkách: tisk, který LLM neposoudil
+(chyba volání nebo vynechání), zůstane nový a posoudí se při příštím Zadání.
 
 Jména osob se neukládají ani neposílají LLM: navrhovatele agent skládá z číselníků
 („vláda (min. financí)“, „skupina poslanců (ODS)“, „Senát“), jména poslanců z úplného názvu
@@ -19,7 +21,9 @@ vypustí a tabulku osob vůbec nečte. Ani na disk nejdou archivy, jen to, co z 
 """
 
 import io
+import itertools
 import json
+import logging
 import re
 import zipfile
 from collections import Counter, defaultdict
@@ -31,9 +35,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from lihoviny.agent import Agent, OdpovedSberu
+from lihoviny.board import Snapshot
 from lihoviny.bus import Message
 from lihoviny.clock import PRAGUE
 from lihoviny.fetch import FetchResult
+
+log = logging.getLogger(__name__)
 
 SOURCE = "psp.cz"
 TISKY_URL = "https://www.psp.cz/eknih/cdrom/opendata/tisky.zip"
@@ -151,35 +158,53 @@ class Regulatorni(Agent):
     def handle_request(self, request: Message) -> dict[str, Any]:
         poslanci, chamber = self._read(POSLANCI_URL, read_chamber)
         archive, tisky = self._read(TISKY_URL, lambda body: read_tisky(body, chamber))
-        archives = [archive, poslanci]
         if not tisky:
             raise RegulatorniError(f"{SOURCE}: v otevřených datech není žádný tisk období")
 
         baseline = not self.board.snapshots(agent=self.name)
         known = self.board.known_tisky()
         new = [t for t in tisky if t.source_id not in known]
-        candidates = {t.source_id: t for t in new if t.keywords()}
-        assessments = self._assess(list(candidates.values()))
-
+        candidates = [t for t in new if t.keywords()]
+        # Tisky bez klíčového slova jsou vyřízené hned; kandidáty zapíše až jejich posudek.
+        pending = [t for t in new if not t.keywords()]
+        snapshot = None
+        new_findings = 0
+        errors: list[Exception] = []
+        # Každá dávka posudků se zapíše hned ve vlastní transakci: chyba LLM u jedné dávky
+        # nezahodí ostatní a tisky bez posudku zůstanou nové pro příští Zadání. Snímek
+        # vznikne s prvním zápisem, takže když LLM selže u všech, tabule zůstane beze změny.
+        for batch in itertools.batched(candidates, BATCH, strict=False):
+            try:
+                assessments = self._assess(list(batch))
+            except Exception as error:
+                log.warning("dávka %s tisků: posouzení LLM selhalo (%s)", len(batch), error)
+                errors.append(error)
+                continue
+            if not assessments:
+                errors.append(RegulatorniError("LLM neposoudil žádný tisk z dávky"))
+                continue
+            with self.transaction():
+                snapshot = snapshot or self._record_snapshot([archive, poslanci], len(tisky))
+                assessed = [t for t in batch if t.source_id in assessments]
+                self.board.record_tisky(snapshot.id, [t.source_id for t in [*pending, *assessed]])
+                pending = []
+                for tisk in assessed:
+                    answer = assessments[tisk.source_id]
+                    if answer.relevant:
+                        self.board.record_finding(
+                            kiq=4,
+                            agent=self.name,
+                            type="snemovni_tisk",
+                            snapshot_id=snapshot.id,
+                            source_url=tisk.url,
+                            content=_finding_content(tisk, answer, baseline=baseline),
+                        )
+                        new_findings += 1
+        if candidates and snapshot is None:
+            raise errors[0]
         with self.transaction():
-            snapshot = self.board.record_snapshot(
-                agent=self.name, source=SOURCE, fetches=archives, item_count=len(tisky)
-            )
-            self.board.record_tisky(snapshot.id, [t.source_id for t in new])
-            new_findings = 0
-            for source_id, tisk in candidates.items():
-                answer = assessments[source_id]
-                if not answer.relevant:
-                    continue
-                self.board.record_finding(
-                    kiq=4,
-                    agent=self.name,
-                    type="snemovni_tisk",
-                    snapshot_id=snapshot.id,
-                    source_url=tisk.url,
-                    content=_finding_content(tisk, answer, baseline=baseline),
-                )
-                new_findings += 1
+            snapshot = snapshot or self._record_snapshot([archive, poslanci], len(tisky))
+            self.board.record_tisky(snapshot.id, [t.source_id for t in pending])
             # Snímek obsahuje i tisky dřívějších nálezů: data jsou vždy úplný stav.
             in_data = {t.source_id for t in tisky}
             self.board.record_snapshot_findings(
@@ -194,6 +219,11 @@ class Regulatorni(Agent):
             snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(tisky)
         )
 
+    def _record_snapshot(self, archives: list[FetchResult], item_count: int) -> Snapshot:
+        return self.board.record_snapshot(
+            agent=self.name, source=SOURCE, fetches=archives, item_count=item_count
+        )
+
     def _read[T](self, url: str, reader: Callable[[bytes], T]) -> tuple[FetchResult, T]:
         """Stáhne archiv a přečte ho. Na disk jde jen přečtená podoba bez jmen (JSON) a otisk
         původního archivu: archivy psp.cz obsahují jména poslanců."""
@@ -205,17 +235,14 @@ class Regulatorni(Agent):
 
         return self.fetcher.get(url, minimize=minimize), read[0]
 
-    def _assess(self, candidates: list[Tisk]) -> dict[int, Assessment]:
-        """Posudek LLM ke každému kandidátovi; chybějící posudek je Selhání."""
-        assessments: dict[int, Assessment] = {}
+    def _assess(self, batch: list[Tisk]) -> dict[int, Assessment]:
+        """Posudky LLM k dávce tisků podle ID; tisk, který LLM vynechal, v nich chybí."""
         today = self.clock.now().astimezone(PRAGUE).date()
-        for start in range(0, len(candidates), BATCH):
-            batch = candidates[start : start + BATCH]
-            answer = self.llm.ask(_prompt(batch, today), Assessments, effort="low", system=SYSTEM)
-            assessments |= {a.id: a for a in answer.tisky}
-        missing = [t.number for t in candidates if t.source_id not in assessments]
-        if missing:
-            raise RegulatorniError(f"LLM neposoudil tisky {', '.join(missing)}")
+        answer = self.llm.ask(_prompt(batch, today), Assessments, effort="low", system=SYSTEM)
+        ids = {t.source_id for t in batch}
+        assessments = {a.id: a for a in answer.tisky if a.id in ids}
+        if missing := [t.number for t in batch if t.source_id not in assessments]:
+            log.warning("LLM neposoudil tisky %s, zůstávají nové", ", ".join(missing))
         return assessments
 
 

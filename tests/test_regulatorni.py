@@ -15,10 +15,11 @@ from pathlib import Path
 
 import psycopg
 
+from lihoviny.agents import regulatorni as regulatorni_module
 from lihoviny.agents.regulatorni import Regulatorni
 from lihoviny.bus import Kind
 from lihoviny.fetch import FakeFetcher, FetchError, read_raw
-from lihoviny.llm import FakeLlm
+from lihoviny.llm import FakeLlm, LlmError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "psp"
 TISKY_URL = "https://www.psp.cz/eknih/cdrom/opendata/tisky.zip"
@@ -319,16 +320,59 @@ def test_archive_without_tisky_table_is_failure(bus, board, clock, raw_dir, make
     assert "chybí tisky.unl" in failure_reason(bus, board, zadani)
 
 
-def test_llm_answer_missing_a_tisk_is_failure_and_tisky_stay_new_for_next_zadani(
+def test_tisk_missing_in_llm_answer_stays_new_for_next_zadani_and_the_rest_is_kept(
     bus, board, clock, raw_dir, make_agent
 ):
     incomplete = {"tisky": BASELINE_ANSWER["tisky"][:-1]}  # bez tisku 243
-    llm = FakeLlm(incomplete, BASELINE_ANSWER)
+    llm = FakeLlm(incomplete, {"tisky": [assessment(TISK_243, relevant=False)]})
     zadani = send_zadani(bus)
-
     make_regulatorni(make_agent, clock, raw_dir, llm).process_pending()
 
-    assert "243" in failure_reason(bus, board, zadani)
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    assert reply.content["new_findings"] == 4
+    assert TISK_243 not in board.known_tisky()
+
     send_zadani(bus)
     make_regulatorni(make_agent, clock, raw_dir, llm).process_pending()
+
+    second_call = llm.calls[1].prompt
+    assert f"ID {TISK_243}," in second_call
+    assert f"ID {TISK_133}," not in second_call
+    assert TISK_243 in board.known_tisky()
     assert sorted(tisky_on_board(board)) == ["133", "153", "193", "208"]
+
+
+class RefusesFirstBatch(FakeLlm):
+    refused = False
+
+    def ask(self, prompt, schema, *, effort, system=""):
+        if not self.refused:
+            self.refused = True
+            raise LlmError("model odmítl odpovědět (refusal, kategorie None)")
+        return super().ask(prompt, schema, effort=effort, system=system)
+
+
+def test_llm_failure_on_one_batch_keeps_the_other_batches(
+    bus, board, clock, raw_dir, make_agent, monkeypatch
+):
+    monkeypatch.setattr(regulatorni_module, "BATCH", 3)  # kandidáti 133, 153, 193 | 208, 243
+    second_batch = {"tisky": [assessment(TISK_208), assessment(TISK_243, relevant=False)]}
+    zadani = send_zadani(bus)
+
+    make_regulatorni(make_agent, clock, raw_dir, RefusesFirstBatch(second_batch)).process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    assert sorted(tisky_on_board(board)) == ["208"]
+    assert {TISK_133, TISK_153, TISK_193}.isdisjoint(board.known_tisky())
+
+
+def test_llm_failure_on_every_batch_is_failure_and_board_stays_untouched(
+    bus, board, clock, raw_dir, make_agent
+):
+    zadani = send_zadani(bus)
+
+    make_regulatorni(make_agent, clock, raw_dir, RefusesFirstBatch()).process_pending()
+
+    assert "refusal" in failure_reason(bus, board, zadani)

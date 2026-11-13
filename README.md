@@ -116,7 +116,9 @@ Jedním požadavkem na WordPress REST API načte posledních 30 článků i s te
 jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
 a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
 vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
-LLM žádný článek neposuzuje dvakrát. Potřebuje `ANTHROPIC_API_KEY`:
+LLM žádný článek neposuzuje dvakrát. Posouzený článek se zapíše hned; když LLM u některého
+článku selže, ostatní zůstanou zapsané a příští Zadání posoudí jen ty zbylé (Selhání je
+odpovědí, jen když LLM selže u všech). Potřebuje `ANTHROPIC_API_KEY`:
 
 ```sh
 docker compose exec medialni lihoviny zadani medialni --cekat 600
@@ -137,7 +139,8 @@ navrhují pravidla (návrhy zákonů, rozpočet, mezinárodní smlouvy, akty EU)
 o vydání poslance ke stíhání nebo návrhy na volbu regulací nejsou a jména nesou už v názvu.
 Nové tisky (které agent v dřívějším snímku neviděl) projdou filtrem klíčových slov v názvu
 (líh, alkohol, spotřební daň, reklama, prodej, značení, obaly, návykové látky, DPH…) a jen ty
-posoudí LLM: relevance pro výrobce lihovin, dopad a odhad termínu účinnosti. Potřebuje
+posoudí LLM: relevance pro výrobce lihovin, dopad a odhad termínu účinnosti. Posudky se
+zapisují po dávkách; tisk, který LLM neposoudil, zůstane nový pro příští Zadání. Potřebuje
 `ANTHROPIC_API_KEY`:
 
 ```sh
