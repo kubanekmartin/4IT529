@@ -231,6 +231,7 @@ class Sortimentni(Agent):
             "bylinné a hořké (Becherovka, Fernet, Jägermeister), ostatní likéry ty sladké.\n\n"
             "Produkty (JSON, jeden na řádek):\n" + _json_lines(items),
             Classification,
+            effort="low",
             system=_SYSTEM,
         )
         by_id = {item.id: item for item in answer.products}
@@ -248,6 +249,7 @@ class Sortimentni(Agent):
             f"{', '.join(WATCHED_COMPETITORS)}. Když výrobce neznáš, vrať null.\n\n"
             "Značky (JSON):\n" + json.dumps(brands, ensure_ascii=False),
             Manufacturers,
+            effort="low",
             system=_SYSTEM,
         )
         found = {item.brand: item.manufacturer for item in answer.brands}

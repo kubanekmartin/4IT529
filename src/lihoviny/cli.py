@@ -140,7 +140,9 @@ def check_llm(llm: ClaudeLlm) -> int:
         return 1
     try:
         answer = llm.ask(
-            "Které město je hlavní město České republiky? Odpověz jen názvem.", _LlmCheckAnswer
+            "Které město je hlavní město České republiky? Odpověz jen názvem.",
+            _LlmCheckAnswer,
+            effort="low",
         )
     except (anthropic.AnthropicError, LlmError) as error:
         print(f"LLM neodpovídá ({llm.model}): {error}", file=sys.stderr)

@@ -185,6 +185,8 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
         "https://www.rohlik.cz/1358451-hennessy-v-s-40-obj",
         "1358451",
     )
+    # Třídění a určení výrobce je extrakce: nízký effort podle specu.
+    assert [call.effort for call in llm.calls] == ["low", "low"]
     # LLM dostane jen nejasné produkty (podle ID u zdroje): slabý nápoj mimo RTD, značka mimo
     # filtr zdroje, likéry (hořké, nebo ostatní?) a dárková balení.
     asked_about_category = llm.calls[0].prompt

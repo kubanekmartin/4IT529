@@ -50,8 +50,10 @@ def test_each_agent_uses_its_configured_model_and_sonnet_by_default(monkeypatch)
     monkeypatch.setenv("LLM_MODEL_ANALYTICKY", "claude-opus-5-5")
     client, requests = fake_claude(ANSWER)
 
-    ClaudeLlm.for_agent("analyticky", client=client).ask("Napiš Brief.", Relevance)
-    ClaudeLlm.for_agent("medialni", client=client).ask("Je článek o lihovinách?", Relevance)
+    ClaudeLlm.for_agent("analyticky", client=client).ask("Napiš Brief.", Relevance, effort="high")
+    ClaudeLlm.for_agent("medialni", client=client).ask(
+        "Je článek o lihovinách?", Relevance, effort="low"
+    )
 
     assert [json.loads(r.content)["model"] for r in requests] == [
         "claude-opus-5-5",
@@ -78,7 +80,9 @@ def test_request_asks_for_structured_output_with_server_side_fallback(monkeypatc
 def test_structured_answer_comes_back_as_typed_object():
     client, _ = fake_claude(ANSWER)
 
-    answer = ClaudeLlm(model="claude-sonnet-5-5", client=client).ask("Je to o rumu?", Relevance)
+    answer = ClaudeLlm(model="claude-sonnet-5-5", client=client).ask(
+        "Je to o rumu?", Relevance, effort="low"
+    )
 
     assert answer == Relevance(relevantni=True, shrnuti="Nová kampaň na rum.")
 
@@ -87,7 +91,7 @@ def test_refusal_raises_so_the_agent_reports_failure():
     client, _ = fake_claude(None, stop_reason="refusal")
 
     with pytest.raises(LlmError, match="refusal"):
-        ClaudeLlm(model="claude-sonnet-5-5", client=client).ask("…", Relevance)
+        ClaudeLlm(model="claude-sonnet-5-5", client=client).ask("…", Relevance, effort="low")
 
 
 def test_one_call_gives_up_within_three_minutes_so_ridici_does_not_record_selhani_meanwhile(
@@ -112,7 +116,7 @@ def test_one_call_gives_up_within_three_minutes_so_ridici_does_not_record_selhan
     )
 
     with pytest.raises(anthropic.APITimeoutError):
-        ClaudeLlm(model="claude-sonnet-5-5").ask("Je to o rumu?", Relevance)
+        ClaudeLlm(model="claude-sonnet-5-5").ask("Je to o rumu?", Relevance, effort="low")
 
     assert len(read_timeouts) >= 2  # krátký výpadek API se zkusí znovu
     assert sum(read_timeouts) <= 180
@@ -121,10 +125,10 @@ def test_one_call_gives_up_within_three_minutes_so_ridici_does_not_record_selhan
 def test_fake_llm_returns_prepared_answers_in_order_and_remembers_prompts():
     llm = FakeLlm({"relevantni": True, "shrnuti": "první"}, Relevance(relevantni=False, shrnuti=""))
 
-    first = llm.ask("Článek 1", Relevance)
-    second = llm.ask("Článek 2", Relevance)
+    first = llm.ask("Článek 1", Relevance, effort="low")
+    second = llm.ask("Článek 2", Relevance, effort="low")
 
     assert (first.shrnuti, second.relevantni) == ("první", False)
     assert [call.prompt for call in llm.calls] == ["Článek 1", "Článek 2"]
     with pytest.raises(AssertionError, match="došly"):
-        llm.ask("Článek 3", Relevance)
+        llm.ask("Článek 3", Relevance, effort="low")

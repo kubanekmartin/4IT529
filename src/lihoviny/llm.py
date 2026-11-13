@@ -29,9 +29,9 @@ class LlmError(Exception):
 
 class Llm(Protocol):
     def ask[T: BaseModel](
-        self, prompt: str, schema: type[T], *, system: str = "", effort: Effort = "low"
+        self, prompt: str, schema: type[T], *, effort: Effort, system: str = ""
     ) -> T:
-        """Třídění a extrakce s `effort="low"`, psaní Briefu s vyšším."""
+        """Effort volí každé volání: třídění a extrakce `"low"`, psaní Briefu vyšší."""
         ...
 
 
@@ -61,7 +61,7 @@ class ClaudeLlm:
         return cls(model=model_for(agent_name), **kwargs)
 
     def ask[T: BaseModel](
-        self, prompt: str, schema: type[T], *, system: str = "", effort: Effort = "low"
+        self, prompt: str, schema: type[T], *, effort: Effort, system: str = ""
     ) -> T:
         response = self._get_client().beta.messages.parse(
             model=self.model,
@@ -105,7 +105,7 @@ class FakeLlm:
         self.calls: list[LlmCall] = []
 
     def ask[T: BaseModel](
-        self, prompt: str, schema: type[T], *, system: str = "", effort: Effort = "low"
+        self, prompt: str, schema: type[T], *, effort: Effort, system: str = ""
     ) -> T:
         self.calls.append(LlmCall(prompt, schema, system, effort))
         if not self._answers:
