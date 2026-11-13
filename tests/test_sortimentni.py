@@ -207,6 +207,26 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
         assert f'"{clear}"' not in asked_about_category
 
 
+def test_abv_marked_obj_wins_over_other_percentages_in_the_name(
+    bus, board, clock, raw_dir, make_agent
+):
+    rum = (FIXTURES / "den1" / "rum.html").read_bytes()
+    rum = rum.replace(
+        '"Božkov Originál Tuzemský 37,5% obj."'.encode(),
+        '"Božkov Originál Tuzemský 100% z cukrové třtiny 37,5% obj."'.encode(),
+    )
+    llm = FakeLlm(BASELINE_CLASSIFICATION, BASELINE_MANUFACTURERS)
+    agent = make_agent(Sortimentni, fetcher=rohlik(raw_dir, clock, broken={"rum": rum}), llm=llm)
+
+    run_zadani(bus, agent)
+
+    (tuzemak,) = [p for p in board.products() if "cukrové třtiny" in p.name]
+    assert (tuzemak.abv, tuzemak.normalized_key) == (
+        Decimal("37.5"),
+        "bozkov original tuzemsky z cukrove trtiny|500|37.5",
+    )
+
+
 def test_sold_out_product_that_comes_back_is_not_novinka(bus, board, clock, raw_dir, make_agent):
     baseline(bus, clock, raw_dir, make_agent)
 

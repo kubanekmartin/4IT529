@@ -146,6 +146,29 @@ def test_price_per_litre_of_ethanol_needs_known_abv(bus, board, clock, raw_dir, 
     assert litre_prices(board, heffron, "JIP") == (0.5, None, 419.8, None)
 
 
+def test_abv_marked_obj_wins_over_other_percentages_in_the_name(
+    bus, board, clock, raw_dir, make_agent
+):
+    routes = source_routes()
+    rum = (FIXTURES / "tuzemak-rum.html").read_bytes()
+    routes[LISTING.format("tuzemak-rum")] = rum.replace(
+        b'itemprop="name" content="Captain Morgan Original Spiced Gold 0,7l"',
+        b'itemprop="name" content="Olmeca Gold 100% Agave 38% obj. 0,7l"',
+    )
+    cenovy = make_cenovy(make_agent, clock, raw_dir, routes)
+    send_zadani(bus)
+
+    cenovy.process_pending()
+
+    # 299,90 / (0,7 l × 0,38)
+    assert litre_prices(board, "Olmeca Gold 100% Agave 38% obj. 0,7l", "Tesco") == (
+        0.7,
+        38.0,
+        428.43,
+        1127.44,
+    )
+
+
 def test_akcni_cena_keeps_card_price_and_start_of_validity_when_source_gives_them(
     bus, board, clock, raw_dir, make_agent
 ):

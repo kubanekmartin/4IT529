@@ -7,8 +7,9 @@ jedna akční cena. Snímek se zapíše při každém Zadání (surové stránky
 u akční ceny, která na tabuli ještě není, takže z řady snímků vzniká historie bez duplicit.
 
 Produkt se ukládá tak, jak ho uvádí zdroj; párování na produkty je samostatný krok.
-Objem a obsah alkoholu se čtou z názvu produktu. Když obsah alkoholu v názvu není (nebo je
-nejednoznačný, třeba u „vybraných druhů“), cena za litr etanolu zůstane prázdná.
+Objem a obsah alkoholu se čtou z názvu produktu stejně jako u sortimentního agenta
+(`lihoviny.products`). Když obsah alkoholu v názvu není (nebo je nejednoznačný, třeba
+u „vybraných druhů“), cena za litr etanolu zůstane prázdná.
 """
 
 import html
@@ -22,6 +23,7 @@ from urllib.parse import urljoin
 from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchResult
+from lihoviny.products import parse_abv, parse_volume_ml
 
 SOURCE = "akcniceny.cz"
 BASE_URL = "https://www.akcniceny.cz"
@@ -169,32 +171,10 @@ def _parse_product(block: str) -> list[Offer]:
     return offers
 
 
-def volume_litres(product: str) -> Decimal | None:
-    """Objem z názvu („0,5l“, „70cl“, „250 ml“, „4x0,33l“) v litrech, jinak None."""
-    match = _VOLUME.search(product)
-    if not match:
-        return None
-    count, amount, unit = match.groups()
-    litres = Decimal(amount.replace(",", ".")) / _UNIT_DIVISOR[unit.lower()]
-    return litres * int(count) if count else litres
-
-
-def abv_percent(product: str) -> Decimal | None:
-    """Obsah alkoholu z názvu („37,5%“, „vol. 15%“), jinak None.
-
-    Více různých hodnot (například „35% … 38%“ u více druhů v jedné akční ceně) nebo zápis
-    „40/37,5%“ znamená, že obsah alkoholu konkrétní láhve neznáme.
-    """
-    values = {Decimal(v.replace(",", ".")) for v in _ABV.findall(product)}
-    if len(values) != 1:
-        return None
-    (value,) = values
-    return value if 0 < value <= 100 else None
-
-
 def _finding_content(offer: Offer, category: str) -> dict[str, Any]:
-    volume = volume_litres(offer.product)
-    abv = abv_percent(offer.product)
+    volume_ml = parse_volume_ml(offer.product)
+    volume = Decimal(volume_ml) / 1000 if volume_ml else None
+    abv = parse_abv(offer.product)
     return {
         "product": offer.product,
         "chain": offer.chain,
@@ -258,6 +238,3 @@ _PRICE = re.compile(r'itemprop="price" content="(\d+(?:\.\d+)?)"')
 _CARD = re.compile(r"<small[^>]*>([^<]+)</small>\s*([\d\s\xa0,]+)")
 _DISCOUNT = re.compile(r"-(\d+)<span>%")
 _FLYER = re.compile(r'href="(/letak/[^"]+)"')
-_VOLUME = re.compile(r"(?:(\d+)\s*[x×]\s*)?(\d+(?:[.,]\d+)?)\s*(ml|cl|l)\b", re.IGNORECASE)
-_UNIT_DIVISOR = {"ml": Decimal(1000), "cl": Decimal(100), "l": Decimal(1)}
-_ABV = re.compile(r"(?<![\d.,/])(\d+(?:[.,]\d+)?)\s*%")

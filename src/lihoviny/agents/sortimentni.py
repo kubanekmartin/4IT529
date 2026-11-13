@@ -364,7 +364,7 @@ def _listing(card: dict[str, Any], category_id: int, category_name: str) -> List
     nápoje) lihovinou není a vrátí None."""
     volume_ml = parse_volume_ml(card["textualAmount"])
     abv = parse_abv(card["name"])
-    if volume_ml is None or abv is None or abv <= 0:
+    if volume_ml is None or abv is None:
         return None
     return Listing(
         source_id=card["productId"],

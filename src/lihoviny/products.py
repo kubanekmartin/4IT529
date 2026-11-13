@@ -38,8 +38,14 @@ CATEGORIES: dict[Category, str] = {
     "ostatni": "Ostatní",
 }
 
-_ABV = re.compile(r"(\d+(?:[.,]\d+)?)\s*%\s*(?:obj|vol)?\.?,?", re.IGNORECASE)
-_VOLUME = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(ml|cl|l)\s*$", re.IGNORECASE)
+# Procento v názvu („37,5%“, „35 % obj.“), ne však „40/37,5%“ (dva údaje v jednom zápisu).
+_ABV = re.compile(
+    r"(?<![\d.,/])(\d+(?:[.,]\d+)?)\s*%(?P<marked>\s*(?:obj|vol|alk)\b\.?)?", re.IGNORECASE
+)
+# „100% Agave“ je surovina tequily, ne obsah alkoholu.
+_NOT_ABV = re.compile(r"\s*ag[aá]ve\b", re.IGNORECASE)
+# Objem: „0,7 l“, „500 ml“, „70cl“, „4x0,33l“ (balení více kusů).
+_VOLUME = re.compile(r"(?:(\d+)\s*[x×]\s*)?(\d+(?:[.,]\d+)?)\s*(ml|cl|l)\b", re.IGNORECASE)
 _UNIT_ML = {"ml": 1, "cl": 10, "l": 1000}
 # Dárkové balení a obal nemění produkt: „dárkové balení se 2 panáky“, „dárkový box“, „Tuba“…
 _PACKAGING = re.compile(
@@ -54,17 +60,32 @@ _PACKAGING = re.compile(
 
 
 def parse_abv(text: str) -> Decimal | None:
-    """Obsah alkoholu v % obj. z názvu („Božkov Originál 37,5% obj.“ → 37.5)."""
-    match = _ABV.search(text)
-    return Decimal(match.group(1).replace(",", ".")) if match else None
+    """Obsah alkoholu v % obj. z názvu produktu, nebo None, když ho název jednoznačně neuvádí.
+
+    Přednost má údaj s „obj.“, „vol.“ nebo „alk.“: „Olmeca 100% Agave 38% obj.“ → 38. Jinak
+    platí hodnota do 100 % bez „agave“ za ní. Několik různých hodnot („35% … 38%“ u více druhů
+    v jedné akční ceně) nebo zápis „40/37,5%“ znamená, že obsah alkoholu láhve neznáme.
+    """
+    marked: set[Decimal] = set()
+    unmarked: set[Decimal] = set()
+    for match in _ABV.finditer(text):
+        value = Decimal(match.group(1).replace(",", "."))
+        if not 0 < value <= 100 or _NOT_ABV.match(text, match.end()):
+            continue
+        (marked if match.group("marked") else unmarked).add(value)
+    values = marked or unmarked
+    return values.pop() if len(values) == 1 else None
 
 
 def parse_volume_ml(text: str) -> int | None:
-    """Objem v ml z údaje o množství („0,7 l“ → 700, „500 ml“ → 500, „50 ks“ → None)."""
-    match = _VOLUME.match(text)
+    """Objem v ml z názvu nebo údaje o množství („0,7 l“ → 700, „4x0,33l“ → 1320, „50 ks“ →
+    None)."""
+    match = _VOLUME.search(text)
     if not match:
         return None
-    return round(Decimal(match.group(1).replace(",", ".")) * _UNIT_ML[match.group(2).lower()])
+    count, amount, unit = match.groups()
+    ml = Decimal(amount.replace(",", ".")) * _UNIT_ML[unit.lower()] * int(count or 1)
+    return round(ml)
 
 
 def product_key(name: str, volume_ml: int, abv: Decimal) -> str:
