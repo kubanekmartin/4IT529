@@ -34,7 +34,7 @@ class Ridici(Agent):
 
     # Sběrní agenti, kterým běh sběru pošle Zadání. Nový sběrný agent = jeho jméno sem
     # (a třída v AGENTS). Ozvěna sem nepatří, není sběrná.
-    collectors: ClassVar[tuple[str, ...]] = ()
+    collectors: ClassVar[tuple[str, ...]] = ("sortimentni", "cenovy")
     # Analytický agent, kterému běh Briefu pošle Zadání; dokud není, Brief se nezadává.
     analyst: ClassVar[str | None] = None
 

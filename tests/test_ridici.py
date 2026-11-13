@@ -101,6 +101,7 @@ def test_ridici_is_registered_and_sends_zadani_only_to_registered_agents():
     assert AGENTS["ridici"] is Ridici
     assert [name for name in recipients if name not in AGENTS] == []
     assert "ozvena" not in Ridici.collectors
+    assert set(Ridici.collectors) == {"cenovy", "sortimentni"}
 
 
 def test_manual_run_sends_zadani_to_every_collector_and_answers_with_the_run(bus, make_agent):
