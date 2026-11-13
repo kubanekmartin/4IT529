@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+
+{% block title %}Architektura{% endblock %}
+
+{% block head %}
+<style>
+  .intro { max-width: 46rem; }
+  section { margin-top: 2rem; }
+  h2 { font-size: 1.25rem; margin: 0 0 .75rem; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; overflow-wrap: anywhere; }
+
+  /* Diagram je v px uživatelských jednotek; pod 36rem se neztenčí, ale posouvá ve vlastním boxu. */
+  .diagram {
+    margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .diagram-scroll { overflow-x: auto; padding: .75rem; }
+  .diagram svg {
+    display: block; width: 100%; min-width: 36rem; max-width: 46rem; height: auto; margin: 0 auto;
+  }
+  .diagram figcaption { padding: 0 .75rem .75rem; font-size: .875rem; color: var(--muted); }
+  .diagram text { fill: var(--text); font-size: 12px; }
+  .diagram .d-name { font-size: 14px; font-weight: 700; }
+  .diagram .d-bold { font-weight: 700; }
+  .diagram .d-muted { fill: var(--muted); }
+  .diagram .d-addr { fill: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .diagram .d-box { fill: var(--bg); stroke: var(--muted); stroke-width: 1.2; }
+  .diagram .d-group { fill: none; stroke: var(--muted); stroke-dasharray: 5 4; }
+  .diagram .d-store { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+  .diagram .d-line { fill: none; stroke: var(--text); stroke-width: 1.5; }
+  .diagram .d-hrot { fill: var(--text); }
+  .diagram .k-request { fill: var(--request); font-weight: 600; }
+  .diagram .k-inform { fill: var(--inform); font-weight: 600; }
+  .diagram .k-query { fill: var(--query); font-weight: 600; }
+  .diagram .k-failure { fill: var(--failure); font-weight: 600; }
+
+  .agents {
+    display: grid; gap: .75rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  }
+  .agent {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .75rem 1rem;
+  }
+  .agent h3 {
+    margin: 0; font-size: 1.05rem;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem;
+  }
+  .agent h3 code { font-weight: 400; color: var(--muted); }
+  .agent dl { margin: 0; }
+  .agent dt {
+    margin-top: .5rem; color: var(--muted);
+    font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .agent dd { margin: 0; }
+
+  /* Druhy zpráv mají stejné barvy jako v logu komunikace. */
+  .kinds { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+  .kind {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--kind-color); border-radius: 6px; padding: .75rem 1rem;
+  }
+  .kind.REQUEST { --kind-color: var(--request); }
+  .kind.INFORM { --kind-color: var(--inform); }
+  .kind.QUERY { --kind-color: var(--query); }
+  .kind.FAILURE { --kind-color: var(--failure); }
+  .kind h3 { margin: 0; font-size: 1.05rem; color: var(--kind-color); }
+  .kind h3 code { font-weight: 400; color: var(--muted); }
+  .kind p { margin: .25rem 0 0; }
+
+  .board dt { font-weight: 600; margin-top: .75rem; }
+  .board dd { margin: 0; }
+  .steps { padding-left: 1.5rem; }
+  .steps li + li { margin-top: .5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Architektura</h1>
+<div class="intro">
+  <p>
+    Multiagentní systém pro konkurenční zpravodajství na trhu lihovin. Šest agentů běží každý
+    ve vlastním kontejneru, nesdílí paměť ani nevolá funkce jiných agentů a mluví spolu jen
+    zprávami přes Postgres. Nálezy zapisují na sdílenou tabuli ve stejné databázi.
+  </p>
+  <p>
+    Že spolu agenti opravdu mluví, ukazuje živě <a href="/log">Log komunikace</a>: najdete v něm
+    každé Zadání, Odpověď, Dotaz i Selhání s odesílatelem, příjemcem a časem.
+  </p>
+</div>
+
+<section id="komunikace">
+  <h2>Diagram komunikace</h2>
+  <figure class="diagram" id="diagram">
+    <div class="diagram-scroll" tabindex="0" role="region" aria-label="Diagram komunikace agentů">
+      <svg viewBox="0 0 640 600" width="640" height="600" role="img"
+           aria-labelledby="diagram-nazev diagram-popis">
+        <title id="diagram-nazev">Komunikace agentů</title>
+        <desc id="diagram-popis">
+          Řídicí agent posílá přes sběrnici zpráv Zadání čtyřem sběrným agentům a analytickému
+          agentovi. Sběrní agenti odpovídají Odpovědí nebo Selháním. Analytický agent posílá
+          Dotazy, na které mu řídicí agent odpoví, a nakonec Odpověď s hotovým Briefem nebo
+          Selhání. Sběrní agenti zapisují snímky a nálezy na sdílenou
+          tabuli, analytický agent z ní čte nálezy a zapisuje na ni Brief, web z ní čte.
+        </desc>
+        <defs>
+          <marker id="sipka" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8"
+                  markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+            <path class="d-hrot" d="M0 1 L10 5 L0 9 z"/>
+          </marker>
+          <marker id="sipka-zpet" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="8"
+                  markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+            <path class="d-hrot" d="M10 1 L0 5 L10 9 z"/>
+          </marker>
+        </defs>
+
+        <!-- Řídicí agent -->
+        <rect class="d-box" x="200" y="12" width="280" height="72" rx="8"/>
+        <text class="d-name" x="340" y="36" text-anchor="middle">Řídicí agent</text>
+        <text class="d-addr" x="340" y="55" text-anchor="middle">ridici</text>
+        <text x="340" y="74" text-anchor="middle">Planning · rozvrh 6:00 a po 7:00</text>
+
+        <!-- Sběrnice zpráv: šipky ji kříží, protože každá zpráva jde přes ni -->
+        <rect class="d-store" x="8" y="112" width="624" height="36" rx="18"/>
+        <text x="28" y="134"><tspan class="d-bold">Sběrnice zpráv</tspan> <tspan class="d-muted">· Postgres</tspan></text>
+        <text class="d-addr" x="360" y="134" text-anchor="middle">LISTEN/NOTIFY</text>
+
+        <!-- Řídicí ↔ sběrní agenti -->
+        <path class="d-line" d="M244 84 V184" marker-end="url(#sipka)"/>
+        <path class="d-line" d="M268 184 V84" marker-end="url(#sipka)"/>
+        <text class="k-request" x="236" y="103" text-anchor="end">Zadání</text>
+        <text x="276" y="103"><tspan class="k-inform">Odpověď</tspan>, <tspan class="k-failure">Selhání</tspan></text>
+
+        <!-- Řídicí ↔ analytický agent -->
+        <path class="d-line" d="M452 84 V216" marker-end="url(#sipka)"/>
+        <path class="d-line" d="M476 216 V84" marker-end="url(#sipka)"/>
+        <text x="444" y="174" text-anchor="end"><tspan class="k-request">Zadání</tspan>, <tspan class="k-inform">Odpověď</tspan></text>
+        <text x="484" y="174"><tspan class="k-query">Dotaz</tspan>, <tspan class="k-inform">Odpověď</tspan>, <tspan class="k-failure">Selhání</tspan></text>
+
+        <!-- Sběrní agenti -->
+        <rect class="d-group" x="8" y="184" width="400" height="212" rx="10"/>
+        <text x="20" y="204"><tspan class="d-bold">Sběrní agenti</tspan> <tspan class="d-muted">· Collection a Processing</tspan></text>
+
+        <rect class="d-box" x="20" y="216" width="182" height="78" rx="6"/>
+        <text class="d-name" x="32" y="240">Sortimentní agent</text>
+        <text class="d-addr" x="32" y="259">sortimentni</text>
+        <text x="32" y="278">KIQ 1 · rohlik.cz</text>
+
+        <rect class="d-box" x="214" y="216" width="182" height="78" rx="6"/>
+        <text class="d-name" x="226" y="240">Cenový agent</text>
+        <text class="d-addr" x="226" y="259">cenovy</text>
+        <text x="226" y="278">KIQ 2 · akcniceny.cz</text>
+
+        <rect class="d-box" x="20" y="306" width="182" height="78" rx="6"/>
+        <text class="d-name" x="32" y="330">Mediální agent</text>
+        <text class="d-addr" x="32" y="349">medialni</text>
+        <text x="32" y="368">KIQ 3 · zboziaprodej.cz</text>
+
+        <rect class="d-box" x="214" y="306" width="182" height="78" rx="6"/>
+        <text class="d-name" x="226" y="330">Regulatorní agent</text>
+        <text class="d-addr" x="226" y="349">regulatorni</text>
+        <text x="226" y="368">KIQ 4 · psp.cz</text>
+
+        <!-- Analytický agent -->
+        <rect class="d-box" x="432" y="216" width="200" height="100" rx="8"/>
+        <text class="d-name" x="444" y="240">Analytický agent</text>
+        <text class="d-addr" x="444" y="259">analyticky</text>
+        <text x="444" y="278">Analysis a Dissemination</text>
+        <text class="d-muted" x="444" y="297">Brief v pondělí 7:00</text>
+
+        <!-- Sdílená tabule -->
+        <path class="d-line" d="M208 396 V440" marker-end="url(#sipka)"/>
+        <text class="d-muted" x="216" y="423">zapisují snímky a nálezy</text>
+        <path class="d-line" d="M532 316 V440" marker-start="url(#sipka-zpet)" marker-end="url(#sipka)"/>
+        <text class="d-muted" x="524" y="372" text-anchor="end">čte nálezy,</text>
+        <text class="d-muted" x="524" y="390" text-anchor="end">zapisuje Brief</text>
+
+        <rect class="d-store" x="8" y="440" width="624" height="60" rx="8"/>
+        <text x="24" y="465"><tspan class="d-name">Sdílená tabule</tspan> <tspan class="d-muted">· Postgres</tspan></text>
+        <text x="24" y="487">snímky · produkty · nálezy · běhy · Briefy</text>
+
+        <!-- Web -->
+        <path class="d-line" d="M532 500 V532" marker-end="url(#sipka)"/>
+        <text class="d-muted" x="524" y="521" text-anchor="end">čte</text>
+        <rect class="d-box" x="432" y="532" width="200" height="56" rx="8"/>
+        <text class="d-name" x="444" y="556">Web</text>
+        <text class="d-muted" x="444" y="576">Brief, data podle KIQ, log</text>
+
+        <!-- Legenda -->
+        <text class="d-bold" x="16" y="546">Druhy zpráv (FIPA ACL)</text>
+        <text x="16" y="568"><tspan class="k-request">Zadání</tspan> <tspan class="d-muted">= REQUEST</tspan></text>
+        <text x="212" y="568"><tspan class="k-inform">Odpověď</tspan> <tspan class="d-muted">= INFORM</tspan></text>
+        <text x="16" y="590"><tspan class="k-query">Dotaz</tspan> <tspan class="d-muted">= QUERY</tspan></text>
+        <text x="212" y="590"><tspan class="k-failure">Selhání</tspan> <tspan class="d-muted">= FAILURE</tspan></text>
+      </svg>
+    </div>
+    <figcaption>
+      Šipky ukazují, kdo komu posílá jaké zprávy. Každá zpráva přitom jde přes sběrnici: je to
+      řádek v tabulce zpráv v Postgresu, žádný agent nevolá jiného přímo. Na úzké obrazovce jde
+      diagram posunout do strany.
+    </figcaption>
+  </figure>
+</section>
+
+<section id="agenti">
+  <h2>Šest agentů</h2>
+  <div class="agents">
+    <article class="agent" id="agent-ridici">
+      <h3>Řídicí agent <code>ridici</code></h3>
+      <dl>
+        <dt>Fáze cyklu CI</dt>
+        <dd>Planning; uzavírá i zpětnou vazbu z Dotazů</dd>
+        <dt>Role</dt>
+        <dd>
+          Drží KIT a čtyři KIQ a podle rozvrhu zahajuje běhy: každý den v 6:00 pošle Zadání
+          sběrným agentům, v pondělí v 7:00 analytickému agentovi (pražský čas). Za agenta,
+          který do 30 minut neodpoví, zapíše Selhání. Dotaz analytického agenta převede na nové
+          Zadání pro sběrného agenta a výsledek mu vrátí.
+        </dd>
+        <dt>Vnější zdroj</dt>
+        <dd>žádný, řídí se rozvrhem</dd>
+        <dt>LLM</dt>
+        <dd>jen převod textu Dotazu na Zadání</dd>
+      </dl>
+    </article>
+
+    <article class="agent" id="agent-sortimentni">
+      <h3>Sortimentní agent <code>sortimentni</code></h3>
+      <dl>
+        <dt>Fáze cyklu CI</dt>
+        <dd>Collection a Processing, KIQ 1 Sortiment</dd>
+        <dt>Role</dt>
+        <dd>
+          Projde kategorii Lihoviny a její podkategorie, zařadí každý produkt do jedné z deseti
+          kategorií a hlásí Novinky: produkty, které se u zdroje objevily poprvé od začátku
+          sledování.
+        </dd>
+        <dt>Vnější zdroj</dt>
+        <dd>rohlik.cz, data, která e-shop vkládá do stránky (<code>__NEXT_DATA__</code>)</dd>
+        <dt>LLM</dt>
+        <dd>jen nejasné kategorie a výrobce nové značky</dd>
+      </dl>
+    </article>
+
+    <article class="agent" id="agent-cenovy">
+      <h3>Cenový agent <code>cenovy</code></h3>
+      <dl>
+        <dt>Fáze cyklu CI</dt>
+        <dd>Collection a Processing, KIQ 2 Promo ceny</dd>
+        <dt>Role</dt>
+        <dd>
+          Sbírá akční ceny lihovin a RTD s řetězcem a obdobím platnosti, přepočítá je na cenu za
+          litr a cenu za litr etanolu a páruje je s produkty ze sortimentu.
+        </dd>
+        <dt>Vnější zdroj</dt>
+        <dd>akcniceny.cz, výpisy alkoholických nápojů (pauza 1 s podle crawl-delay)</dd>
+        <dt>LLM</dt>
+        <dd>jen záloha při párování akční ceny na produkt</dd>
+      </dl>
+    </article>
+
+    <article class="agent" id="agent-medialni">
+      <h3>Mediální agent <code>medialni</code></h3>
+      <dl>
+        <dt>Fáze cyklu CI</dt>
+        <dd>Collection a Processing, KIQ 3 Komunikace</dd>
+        <dt>Role</dt>
+        <dd>
+          Čte nové články oborového tisku. Články bez vztahu k lihovinám zahodí, u ostatních
+          zapíše výrobce, značku, kanál, téma a shrnutí ve dvou větách. Jména osob neukládá.
+        </dd>
+        <dt>Vnější zdroj</dt>
+        <dd>zboziaprodej.cz (Zboží&amp;Prodej), posledních 30 článků přes WordPress REST API</dd>
+        <dt>LLM</dt>
+        <dd>relevance článku, výrobce, značka, kanál, téma a shrnutí</dd>
+      </dl>
+    </article>
+
+    <article class="agent" id="agent-regulatorni">
+      <h3>Regulatorní agent <code>regulatorni</code></h3>
+      <dl>
+        <dt>Fáze cyklu CI</dt>
+        <dd>Collection a Processing, KIQ 4 Regulace</dd>
+        <dt>Role</dt>
+        <dd>
+          Hlídá nové sněmovní tisky o alkoholu (spotřební daň, reklama, prodej, značení) a ke
+          každému odhadne dopad na výrobce lihovin a termín účinnosti. Místo jmen poslanců
+          uvádí „skupina poslanců (strana)“.
+        </dd>
+        <dt>Vnější zdroj</dt>
+        <dd>psp.cz, otevřená data Poslanecké sněmovny</dd>
+        <dt>LLM</dt>
+        <dd>až po filtru klíčových slov: relevance, dopad a termín účinnosti</dd>
+      </dl>
+    </article>
+
+    <article class="agent" id="agent-analyticky">
+      <h3>Analytický agent <code>analyticky</code></h3>
+      <dl>
+        <dt>Fáze cyklu CI</dt>
+        <dd>Analysis a Dissemination</dd>
+        <dt>Role</dt>
+        <dd>
+          V pondělí čte nálezy všech čtyř KIQ ze sdílené tabule a píše Brief: Co se stalo podle
+          KIQ, Netypické nálezy a Doporučení k portfoliu zadavatele, se 3–4 grafy a odkazy na
+          zdroje. Když v nálezech najde mezeru, pošle řídicímu agentovi Dotaz (nejvýš tři na
+          běh) a po odpovědích Brief dopíše. Selhání sběru v Briefu výslovně uvede.
+        </dd>
+        <dt>Vnější zdroj</dt>
+        <dd>žádný; čte sdílenou tabuli a portfolio zadavatele</dd>
+        <dt>LLM</dt>
+        <dd>psaní Briefu</dd>
+      </dl>
+    </article>
+  </div>
+  <p class="muted">
+    Kromě nich běží diagnostický agent Ozvěna (<code>ozvena</code>): na Zadání odpoví stejným
+    obsahem, takže ověří sběrnici. V cyklu CI roli nemá.
+  </p>
+</section>
+
+<section id="zpravy">
+  <h2>Zprávy a sběrnice</h2>
+  <p>
+    Zpráva je řádek v tabulce zpráv: ID, ID konverzace, druh podle FIPA ACL, odesílatel,
+    příjemce, obsah v JSON, čas odeslání a čas vyzvednutí. Odeslat zprávu znamená vložit řádek;
+    databázový trigger pak pošle <code>NOTIFY</code> se jménem příjemce. Agent čeká na
+    <code>LISTEN</code>, po probuzení si vyzvedne své nevyzvednuté zprávy a pro jistotu se na nové
+    podívá i každých 30 sekund. Vyzvednutí zprávu hned označí, takže se doručí nejvýš jednou;
+    když agent uprostřed práce spadne, pokryje to 30minutový limit řídicího agenta.
+  </p>
+  <p>
+    Tabulka zpráv je zároveň log komunikace: <a href="/log">Log komunikace</a> ukazuje živě
+    každou zprávu, kdo ji komu poslal a kdy, a <a href="/behy">Běhy</a> výsledky jednotlivých
+    Zadání.
+  </p>
+  <ul class="kinds">
+    <li class="kind REQUEST" id="druh-REQUEST">
+      <h3>Zadání <code>REQUEST</code></h3>
+      <p>
+        Řídicí agent sběrnému nebo analytickému agentovi: co a kde má zjistit. Každé Zadání má
+        vlastní konverzaci, do které patří i odpověď. Ručně ho může poslat člen týmu
+        (odesílatel <code>clen-tymu</code>), třeba při předvedení.
+      </p>
+    </li>
+    <li class="kind INFORM" id="druh-INFORM">
+      <h3>Odpověď <code>INFORM</code></h3>
+      <p>
+        Výsledek Zadání nebo Dotazu ve stejné konverzaci. Sběrný agent v ní posílá jen přehled
+        <code>{"snapshot_id", "new_findings", "item_count"}</code>: který snímek zapsal, kolik
+        přibylo nových nálezů a kolik položek snímek má. Samotné nálezy jsou na sdílené tabuli,
+        ne ve zprávě.
+      </p>
+    </li>
+    <li class="kind QUERY" id="druh-QUERY">
+      <h3>Dotaz <code>QUERY</code></h3>
+      <p>
+        Analytický agent řídicímu agentovi, když v nálezech najde mezeru nebo nejasnost: KIQ, co
+        chybí a návrh doplňujícího sběru. Řídicí agent z něj udělá nové Zadání pro příslušného
+        sběrného agenta a jeho výsledek vrátí jako Odpověď. Nejvýš tři Dotazy a jedno kolo
+        zpětné vazby na běh.
+      </p>
+    </li>
+    <li class="kind FAILURE" id="druh-FAILURE">
+      <h3>Selhání <code>FAILURE</code></h3>
+      <p>
+        Zadání se nepodařilo splnit, s důvodem: zdroj nebyl dostupný ani po třech pokusech, nebo
+        z něj agent nic nevyčetl. Když agent do 30 minut neodpoví vůbec, zapíše Selhání za něj
+        řídicí agent. Brief každou takovou mezeru výslovně uvede.
+      </p>
+    </li>
+  </ul>
+</section>
+
+<section id="tabule">
+  <h2>Sdílená tabule</h2>
+  <p>
+    Vedle sběrnice je ve stejném Postgresu sdílená tabule (blackboard): data, která agenti
+    zapisují a ostatní čtou. Zprávy na ně jen odkazují, třeba číslem snímku.
+  </p>
+  <dl class="board">
+    <dt>Snímky</dt>
+    <dd>
+      Stav zdroje při jednom běhu jednoho sběrného agenta: zdroj, čas, odkazy na surové stažené
+      stránky na disku a počet položek. Snímky se nepřepisují, takže z nich vzniká historie.
+    </dd>
+    <dt>Produkty</dt>
+    <dd>
+      Konkrétní balení lihoviny s normalizovaným klíčem (značka, název, objem, obsah alkoholu),
+      výrobcem, kategorií a tím, kdy a kde ho agent viděl poprvé.
+    </dd>
+    <dt>Nálezy</dt>
+    <dd>
+      Nález je jedna zjištěná skutečnost s KIQ, typem (novinka, akční cena, článek, sněmovní
+      tisk), odkazem na zdroj, obsahem a časem zjištění; může patřit k produktu a snímku. Není
+      to zpráva: sběrný agent ho zapíše na tabuli a v Odpovědi pošle jen počet nových nálezů.
+    </dd>
+    <dt>Běhy a Briefy</dt>
+    <dd>
+      Řídicí agent si zapisuje běhy a výsledek každého Zadání, analytický agent hotové Briefy.
+    </dd>
+  </dl>
+  <p>
+    Sběrný agent zapíše snímek, produkty a nálezy v jedné transakci, takže tabule nikdy nedrží
+    polovinu snímku. Analytický agent čte nálezy všech čtyř KIQ. Web čte tabuli i sběrnici přes
+    databázovou roli, která smí jen číst.
+  </p>
+</section>
+
+<section id="beh">
+  <h2>Jak probíhá běh</h2>
+  <ol class="steps">
+    <li>
+      Každý den v 6:00 pražského času zahájí řídicí agent běh sběru a pošle Zadání všem čtyřem
+      sběrným agentům, každému ve vlastní konverzaci.
+    </li>
+    <li>
+      Sběrný agent stáhne svůj zdroj ohleduplně (pauza podle crawl-delay, při chybě tři pokusy
+      s rostoucí pauzou), surové stránky uloží na disk a na tabuli zapíše snímek a nové nálezy.
+      Řídicímu agentovi pošle Odpověď s přehledem, nebo Selhání s důvodem.
+    </li>
+    <li>
+      Za agenta, který do 30 minut neodpoví, zapíše Selhání řídicí agent. Běh tak vždy skončí
+      a stránka <a href="/behy">Běhy</a> ukáže varování.
+    </li>
+    <li>
+      V pondělí v 7:00 pošle řídicí agent Zadání analytickému agentovi i s přehledem posledního
+      sběru, takže Brief ví, který zdroj selhal.
+    </li>
+    <li>
+      Analytický agent čte nálezy z tabule. Když najde mezeru, pošle řídicímu agentovi Dotaz;
+      ten zadá doplňující sběr a výsledek mu vrátí. Tady se cyklus CI uzavírá zpětnou vazbou
+      a v <a href="/log">logu</a> je vidět jako Dotaz, nové Zadání a dvě Odpovědi.
+    </li>
+    <li>
+      Analytický agent dopíše Brief, uloží ho na tabuli a řídicímu agentovi odpoví. Web Brief
+      ukáže zadavateli.
+    </li>
+  </ol>
+</section>
+
+<section id="sluzby">
+  <h2>Agenti jako samostatné služby</h2>
+  <p>
+    Všichni agenti používají jeden Docker image; každý běží ve vlastním kontejneru a služba
+    v Docker Compose určuje jen příkaz <code>lihoviny agent &lt;jméno&gt;</code>. Výpadek
+    jednoho agenta ostatní nezastaví. Vedle agentů běží Postgres (sběrnice i tabule), jednorázová
+    služba, která před startem agentů aplikuje migrace schématu, a web (FastAPI se stránkami
+    vykreslenými na serveru, bez JavaScriptu). Agenti volají Claude API přes oficiální SDK;
+    model jde nastavit zvlášť pro každého agenta a API klíč je jen na serveru.
+  </p>
+  <p>
+    Proč Postgres, a ne RabbitMQ nebo framework jako CrewAI či LangGraph: je to jediná služba
+    navíc, log komunikace je přímo tabulka zpráv a agenti zůstávají samostatné procesy
+    (frameworky je spouštějí v jednom procesu). Cenou je jediný bod selhání: když Postgres
+    neběží, nekomunikuje nikdo. Rozhodnutí popisuje ADR 0001 v repozitáři
+    (<code>docs/adr/0001-agenti-v-kontejnerech-postgres-jako-sbernice.md</code>).
+  </p>
+</section>
+{% endblock %}
