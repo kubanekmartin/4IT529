@@ -85,25 +85,28 @@ class Cenovy(Agent):
         if not offers:
             raise CenovyError(f"{SOURCE}: ve výpisech není žádná akční cena (změnila se stránka?)")
 
-        known = self._known_offer_keys()
+        known = self._known_offers()
         new_findings = 0
         # Snímek a jeho nálezy jedna transakce: pád uprostřed nenechá na tabuli půl snímku.
         with self.transaction():
             snapshot = self.board.record_snapshot(
                 agent=self.name, source=SOURCE, fetches=pages, item_count=len(offers)
             )
+            in_snapshot = []
             for key, (product_url, content) in offers.items():
-                if key in known:
-                    continue
-                self.board.record_finding(
-                    kiq=2,
-                    agent=self.name,
-                    type="akcni_cena",
-                    snapshot_id=snapshot.id,
-                    source_url=product_url,
-                    content=content,
-                )
-                new_findings += 1
+                if key not in known:
+                    known[key] = self.board.record_finding(
+                        kiq=2,
+                        agent=self.name,
+                        type="akcni_cena",
+                        snapshot_id=snapshot.id,
+                        source_url=product_url,
+                        content=content,
+                    ).id
+                    new_findings += 1
+                in_snapshot.append(known[key])
+            # Nález vzniká jen poprvé; snímek si pamatuje i dřívější akční ceny, které obsahuje.
+            self.board.record_snapshot_findings(snapshot.id, in_snapshot)
         return OdpovedSberu(
             snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(offers)
         )
@@ -120,9 +123,10 @@ class Cenovy(Agent):
             offers.extend(page_offers)
         return offers
 
-    def _known_offer_keys(self) -> set[tuple]:
+    def _known_offers(self) -> dict[tuple, int]:
+        """Akční ceny, které už jsou na tabuli: klíč → ID nálezu."""
         return {
-            _offer_key(f.source_url, f.content)
+            _offer_key(f.source_url, f.content): f.id
             for f in self.board.findings(kiq=2)
             if f.agent == self.name and f.type == "akcni_cena"
         }

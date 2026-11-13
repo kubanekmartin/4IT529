@@ -1,7 +1,8 @@
 """Stránka Akční ceny (KIQ 2): akční ceny lihovin a RTD platné k času posledního snímku.
 
 „Platné“ se počítá k datu posledního snímku cenového agenta, ne k dnešku: když sběr
-vypadne, stránka ukáže stav, jaký byl, a čas snímku nad tabulkou to přizná.
+vypadne, stránka ukáže stav, jaký byl, a čas snímku nad tabulkou to přizná. Akční cena bez
+data konce platí, dokud ji poslední snímek obsahuje (tabulka `snapshot_findings`).
 """
 
 from datetime import date
@@ -33,7 +34,9 @@ def akcni_ceny_page(request: Request, conn: Annotated[psycopg.Connection, Depend
                 SELECT source_url, content FROM findings
                 WHERE type = 'akcni_cena'
                   AND (content->>'valid_until' >= %(day)s
-                       OR (content->>'valid_until' IS NULL AND snapshot_id = %(snapshot)s))
+                       OR (content->>'valid_until' IS NULL AND id IN (
+                           SELECT finding_id FROM snapshot_findings
+                           WHERE snapshot_id = %(snapshot)s)))
                 """,
                 {"day": snapshot_day.isoformat(), "snapshot": snapshot["id"]},
             ).fetchall()

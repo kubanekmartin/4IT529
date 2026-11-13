@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from test_cenovy import make_cenovy, send_zadani
+from test_cenovy import FIXTURES, LISTING, make_cenovy, send_zadani, source_routes
 
 from lihoviny.web.app import create_app
 
@@ -58,6 +58,28 @@ def test_akcni_ceny_page_hides_akcni_ceny_that_ended_before_the_last_snapshot(we
     assert "Lidl" not in html
     assert "Cointreau" not in html
     assert "Albert" in html
+
+
+def test_akcni_cena_without_end_date_stays_on_the_page_while_the_latest_snapshot_has_it(
+    web, bus, clock, raw_dir, make_agent
+):
+    def collect(routes):
+        send_zadani(bus)
+        make_cenovy(make_agent, clock, raw_dir, routes).process_pending()
+        clock.advance(days=1)
+
+    without_end = source_routes()
+    without_end[LISTING.format("michany-napoj")] = (
+        (FIXTURES / "michany-napoj.html").read_bytes().replace(b"Plat\xc3\xad do:", b"Platnost:")
+    )
+    collect(without_end)
+    collect(without_end)  # nález vznikl v prvním snímku, druhý ho obsahuje znovu
+
+    assert "neuvedeno" in row(web.get("/akcni-ceny").text, "Míchaný drink 4,5% 250 ml", "Albert")
+
+    collect(source_routes())  # zdroj už uvádí konec platnosti: jiná akční cena
+
+    assert "neuvedeno" not in web.get("/akcni-ceny").text
 
 
 def test_akcni_ceny_page_says_so_before_first_snapshot(web):

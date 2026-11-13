@@ -227,6 +227,14 @@ class Board:
                 {"kiq": kiq, "snapshot_id": snapshot_id},
             ).fetchall()
 
+    def record_snapshot_findings(self, snapshot_id: int, finding_ids: Sequence[int]) -> None:
+        """Zapíše, které nálezy (i dřívější) snímek u zdroje znovu viděl."""
+        with self._cursor() as cur:
+            cur.executemany(
+                "INSERT INTO snapshot_findings (snapshot_id, finding_id) VALUES (%s, %s)",
+                [(snapshot_id, finding_id) for finding_id in finding_ids],
+            )
+
     def start_beh(self, kind: DruhBehu, *, scheduled_for: datetime | None = None) -> Beh | None:
         """Zahájí běh. Termín rozvrhu, za který už běh proběhl, vrátí None."""
         with self._cursor(Beh) as cur:
