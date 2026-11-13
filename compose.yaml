@@ -72,6 +72,15 @@ services:
     volumes:
       - rawdata:/data/raw
 
+  sortimentni:
+    <<: *app
+    command: ["lihoviny", "agent", "sortimentni"]
+    environment:
+      <<: *agent-env
+      LLM_MODEL_SORTIMENTNI: ${LLM_MODEL_SORTIMENTNI:-}
+    volumes:
+      - rawdata:/data/raw
+
 volumes:
   pgdata:
   rawdata:

@@ -1,12 +1,14 @@
 """Sdílená tabule (blackboard): snímky zdrojů a nálezy, ze kterých čte analytický agent.
 
 Sběrný agent po stažení zdroje zapíše jeden snímek (odkazuje na surová data na disku)
-a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady.
+a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady. Produkty zapisuje
+sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 import psycopg
@@ -15,6 +17,7 @@ from psycopg.types.json import Jsonb
 
 from lihoviny.clock import Clock
 from lihoviny.fetch import FetchResult
+from lihoviny.products import Category
 
 FindingType = Literal["novinka", "akcni_cena", "clanek", "snemovni_tisk"]
 
@@ -42,7 +45,30 @@ class Finding:
     found_at: datetime
 
 
+@dataclass(frozen=True)
+class Product:
+    """Konkrétní balení lihoviny; `normalized_key` viz `lihoviny.products.product_key`."""
+
+    id: int
+    normalized_key: str
+    manufacturer: str | None
+    brand: str
+    name: str
+    volume_ml: int
+    abv: Decimal
+    category: Category
+    first_seen_at: datetime
+    first_seen_url: str
+    first_seen_snapshot_id: int
+    source_product_id: str
+
+
 _FINDING_COLUMNS = "id, kiq, agent, type, product_id, snapshot_id, source_url, content, found_at"
+_SNAPSHOT_COLUMNS = "id, agent, source, taken_at, raw_paths, item_count"
+_PRODUCT_COLUMNS = (
+    "id, normalized_key, manufacturer, brand, name, volume_ml, abv, category, first_seen_at,"
+    " first_seen_url, first_seen_snapshot_id, source_product_id"
+)
 
 
 class Board:
@@ -56,10 +82,10 @@ class Board:
         """Zapíše snímek zdroje; `fetches` jsou všechna stažení, ze kterých snímek vznikl."""
         with self._connect(Snapshot) as conn:
             return conn.execute(
-                """
+                f"""
                 INSERT INTO snapshots (agent, source, taken_at, raw_paths, item_count)
                 VALUES (%s, %s, %s, %s, %s)
-                RETURNING id, agent, source, taken_at, raw_paths, item_count
+                RETURNING {_SNAPSHOT_COLUMNS}
                 """,
                 [agent, source, self._clock.now(), [str(f.raw_path) for f in fetches], item_count],
             ).fetchone()
@@ -67,12 +93,59 @@ class Board:
     def snapshot(self, snapshot_id: int) -> Snapshot:
         with self._connect(Snapshot) as conn:
             return conn.execute(
-                """
-                SELECT id, agent, source, taken_at, raw_paths, item_count
-                FROM snapshots WHERE id = %s
-                """,
-                [snapshot_id],
+                f"SELECT {_SNAPSHOT_COLUMNS} FROM snapshots WHERE id = %s", [snapshot_id]
             ).fetchone()
+
+    def snapshots(self, *, agent: str) -> list[Snapshot]:
+        """Všechny snímky agenta od nejstaršího."""
+        with self._connect(Snapshot) as conn:
+            return conn.execute(
+                f"SELECT {_SNAPSHOT_COLUMNS} FROM snapshots WHERE agent = %s ORDER BY id", [agent]
+            ).fetchall()
+
+    def record_product(
+        self,
+        *,
+        normalized_key: str,
+        manufacturer: str | None,
+        brand: str,
+        name: str,
+        volume_ml: int,
+        abv: Decimal,
+        category: Category,
+        first_seen_url: str,
+        first_seen_snapshot_id: int,
+        source_product_id: str,
+    ) -> Product:
+        """Zapíše nově viděný produkt; `first_seen_at` = clock.now()."""
+        with self._connect(Product) as conn:
+            return conn.execute(
+                f"""
+                INSERT INTO products
+                    (normalized_key, manufacturer, brand, name, volume_ml, abv, category,
+                     first_seen_at, first_seen_url, first_seen_snapshot_id, source_product_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING {_PRODUCT_COLUMNS}
+                """,
+                [
+                    normalized_key,
+                    manufacturer,
+                    brand,
+                    name,
+                    volume_ml,
+                    abv,
+                    category,
+                    self._clock.now(),
+                    first_seen_url,
+                    first_seen_snapshot_id,
+                    source_product_id,
+                ],
+            ).fetchone()
+
+    def products(self) -> list[Product]:
+        """Všechny produkty v pořadí, jak byly poprvé viděny."""
+        with self._connect(Product) as conn:
+            return conn.execute(f"SELECT {_PRODUCT_COLUMNS} FROM products ORDER BY id").fetchall()
 
     def record_finding(
         self,
