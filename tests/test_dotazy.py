@@ -7,7 +7,7 @@ Brief v 7:00. Celá výměna kolem Briefu má jedno ID konverzace, takže ji tes
 `bus.conversation(...)` a log komunikace ji ukazuje pohromadě.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -288,6 +288,29 @@ def test_ridici_turns_down_a_dotaz_that_leaves_no_time_to_finish_the_brief(
 
     assert turned_down(bus, late) == "na doplňující sběr už nezbývá čas, Brief se musí dopsat"
     assert new_zadani(bus, "cenovy") == []
+
+
+def test_answer_to_zadani_z_dotazu_whose_dotaz_is_elsewhere_is_still_recorded(
+    bus, board, clock, make_agent
+):
+    # Zadání z Dotazu, jehož Dotaz v konverzaci není (poškozená data): odpověď sběrného agenta
+    # se přesto zapíše, jinak by Zadání zůstalo otevřené a každé kolo by selhalo znovu.
+    ridici = make_agent(Ridici)
+    beh = board.start_beh("brief")
+    stray = bus.send(kind=Kind.QUERY, sender="analyticky", recipient="nikdo", content={"kiq": 2})
+    request = bus.send(kind=Kind.REQUEST, sender="ridici", recipient="cenovy", content={})
+    board.add_zadani(
+        beh_id=beh.id,
+        agent="cenovy",
+        conversation_id=request.conversation_id,
+        deadline=clock.now() + timedelta(minutes=15),
+        dotaz_id=stray.id,
+    )
+    answer(bus, "cenovy")
+
+    ridici.process_pending()
+
+    assert [(z.agent, z.outcome) for z in board.zadani(beh.id)] == [("cenovy", "INFORM")]
 
 
 def test_ridici_and_analyst_agree_on_the_sberny_agent_of_each_kiq():

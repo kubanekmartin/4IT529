@@ -236,7 +236,16 @@ class Ridici(Agent):
     def _answer_dotaz(self, zadani: Zadani) -> None:
         """Výsledek Zadání z Dotazu pošle tazateli jako odpověď na jeho Dotaz."""
         conversation = self.bus.conversation(zadani.conversation_id)
-        dotaz = next(m for m in conversation if m.id == zadani.dotaz_id)
+        dotaz = next((m for m in conversation if m.id == zadani.dotaz_id), None)
+        if dotaz is None:
+            # Výsledek Zadání se zapíše i tak; bez Dotazu není komu odpovědět.
+            log.warning(
+                "%s: Dotaz %s není v konverzaci %s, odpověď nemá komu poslat",
+                self.name,
+                zadani.dotaz_id,
+                zadani.conversation_id,
+            )
+            return
         content: dict[str, Any] = {"dotaz_id": dotaz.id, "agent": zadani.agent}
         if zadani.outcome == Kind.INFORM:
             if zadani.new_findings is not None:
