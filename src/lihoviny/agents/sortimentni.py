@@ -320,49 +320,62 @@ def _subcategories(root: FetchResult) -> dict[str, str]:
 def _parse_subcategories(
     pages: list[FetchResult], names: dict[str, str]
 ) -> tuple[list[Listing], set[str]]:
-    """Karty produktů a značky z filtru všech stránek podkategorií."""
+    """Karty produktů a značky z filtru všech stránek podkategorií.
+
+    Stránka bez karet, nebo výpis, ve kterém není žádná lihovina, znamená, že Rohlík změnil
+    stránku: prázdný snímek by vypadal jako zdravý den bez Novinek, proto Selhání.
+    """
     listings: list[Listing] = []
     brands: set[str] = set()
     for page in pages:
         try:
             props = _page_props(page)
-            listings += _page_listings(props, names[page.url])
+            cards = _page_cards(props)
+            for card in cards:
+                listing = _listing(card, props["categoryId"], names[page.url])
+                if listing is not None:
+                    listings.append(listing)
             brands |= _page_brands(props)
         except (KeyError, TypeError, ValueError) as error:
             raise SourceFormatError(
                 f"{page.url}: nečekaná struktura stránky ({error!r})"
             ) from error
+        if not cards:
+            raise SourceFormatError(f"{page.url}: ve výpisu podkategorie nejsou žádné produkty")
+    if not listings:
+        raise SourceFormatError(f"{SOURCE}: ve výpisech není žádná lihovina (změnila se stránka?)")
     return listings, brands
 
 
-def _page_listings(props: dict[str, Any], name: str) -> list[Listing]:
-    """Karty z výpisu podkategorie, které stránka patří. Karty bez objemu nebo obsahu alkoholu
-    (příslušenství, nealko nápoje) přeskočí, protože to nejsou lihoviny."""
+def _page_cards(props: dict[str, Any]) -> list[dict[str, Any]]:
+    """Karty z výpisu podkategorie, které stránka patří (ne z jiných výpisů na stránce)."""
     category_id = props["categoryId"]
-    listings = []
+    cards = []
     for query in _queries(props):
         key = query["queryKey"]
-        if key[0] != "categoryProductCards" or key[2]["id"] != category_id:
-            continue
-        for card_page in query["state"]["data"]["pages"]:
-            for card in card_page["cardsData"]:
-                volume_ml = parse_volume_ml(card["textualAmount"])
-                abv = parse_abv(card["name"])
-                if volume_ml is None or abv is None or abv <= 0:
-                    continue
-                listings.append(
-                    Listing(
-                        source_id=card["productId"],
-                        name=" ".join(card["name"].split()),
-                        url=f"{BASE_URL}/{card['productId']}-{card['slug']}",
-                        volume_ml=volume_ml,
-                        abv=abv,
-                        labelled_new=any(b["type"] == "NEW" for b in card["badges"]),
-                        source_category_id=category_id,
-                        source_category_name=name,
-                    )
-                )
-    return listings
+        if key[0] == "categoryProductCards" and key[2]["id"] == category_id:
+            for card_page in query["state"]["data"]["pages"]:
+                cards += card_page["cardsData"]
+    return cards
+
+
+def _listing(card: dict[str, Any], category_id: int, category_name: str) -> Listing | None:
+    """Karta jako lihovina; karta bez objemu nebo obsahu alkoholu (příslušenství, nealko
+    nápoje) lihovinou není a vrátí None."""
+    volume_ml = parse_volume_ml(card["textualAmount"])
+    abv = parse_abv(card["name"])
+    if volume_ml is None or abv is None or abv <= 0:
+        return None
+    return Listing(
+        source_id=card["productId"],
+        name=" ".join(card["name"].split()),
+        url=f"{BASE_URL}/{card['productId']}-{card['slug']}",
+        volume_ml=volume_ml,
+        abv=abv,
+        labelled_new=any(badge["type"] == "NEW" for badge in card["badges"]),
+        source_category_id=category_id,
+        source_category_name=category_name,
+    )
 
 
 def _page_brands(props: dict[str, Any]) -> set[str]:

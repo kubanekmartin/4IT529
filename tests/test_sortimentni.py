@@ -8,6 +8,8 @@ from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from lihoviny.agents.sortimentni import Sortimentni
 from lihoviny.bus import Kind
 from lihoviny.fetch import FakeFetcher, FetchError
@@ -314,3 +316,44 @@ def test_write_failure_midway_leaves_nothing_from_the_zadani_on_board(
     assert board.snapshots(agent="sortimentni") == []
     assert board.products() == []
     assert board.findings(kiq=1) == []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        (b'"categoryProductCards"', b'"productCardsV2"'),  # Rohlík přejmenoval dotaz
+        (b'"cardsData": [', b'"cardsData": [], "puvodni": ['),  # výpis bez karet
+    ],
+    ids=["prejmenovany-dotaz", "prazdny-vypis"],
+)
+def test_subcategory_without_product_cards_is_failure_not_an_empty_snapshot(
+    bus, board, clock, raw_dir, make_agent, change
+):
+    vodka = (FIXTURES / "den1" / "vodka.html").read_bytes().replace(*change)
+    agent = make_agent(Sortimentni, fetcher=rohlik(raw_dir, clock, broken={"vodka": vodka}))
+
+    reply = run_zadani(bus, agent)
+
+    assert reply.kind is Kind.FAILURE
+    assert reply.content["reason"].startswith(f"{PAGES['vodka']}: ")
+    assert board.snapshots(agent="sortimentni") == []
+
+
+def test_listings_without_any_spirit_are_failure_not_an_empty_snapshot(
+    bus, board, clock, raw_dir, make_agent
+):
+    # Kdyby Rohlík změnil zápis množství, žádná karta by neměla objem a nebyla by lihovinou.
+    without_volume = {
+        page: (FIXTURES / "den1" / f"{page}.html")
+        .read_bytes()
+        .replace(b'"textualAmount": ', b'"textualAmount": "1 ks", "puvodni": ')
+        for page in PAGES
+        if page != "lihoviny"
+    }
+    agent = make_agent(Sortimentni, fetcher=rohlik(raw_dir, clock, broken=without_volume))
+
+    reply = run_zadani(bus, agent)
+
+    assert reply.kind is Kind.FAILURE
+    assert "žádná lihovina" in reply.content["reason"]
+    assert board.snapshots(agent="sortimentni") == []
