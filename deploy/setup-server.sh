@@ -120,7 +120,7 @@ setup_app() {
         step "SSH klíč: smí spustit jen /usr/local/bin/lihoviny-deploy"
         local pubkey tmp
         pubkey=$(<"$pubkey_file")
-        [[ $pubkey =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+(\ [A-Za-z0-9@._-]*)?$ ]] ||
+        [[ $pubkey =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+(\ [A-Za-z0-9@._\ -]*)?$ ]] ||
             die "čekám jeden veřejný klíč ssh-ed25519"
         # Adresář i soubor patří rootovi: uživatel si omezení klíče nemůže sám změnit.
         install -d -o root -g root -m 755 "/home/$DEPLOY_USER/.ssh"

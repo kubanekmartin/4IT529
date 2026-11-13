@@ -38,9 +38,11 @@ compose() {
         --env-file "$ENV_FILE" -f "$release/compose.yaml" "$@"
 }
 
-current_release() {
+# Nastaví CURRENT na adresář aktuálního release. Volá se přímo, ne v $(...), aby `die` skončil
+# celý skript, a ne jen podshell.
+use_current() {
     [[ -L $APP_DIR/current ]] || die "zatím není nasazený žádný release"
-    readlink -f "$APP_DIR/current"
+    CURRENT=$(readlink -f "$APP_DIR/current")
 }
 
 lock() {
@@ -70,11 +72,11 @@ start_release() {
 }
 
 prune_releases() {
-    local current old
-    current=$(basename "$(current_release)")
+    local old
+    use_current
     # Nejnovější releasy zůstávají (pro ruční návrat), starší i s image se smažou.
     while IFS= read -r old; do
-        [[ $old == "$current" ]] && continue
+        [[ $old == "$(basename "$CURRENT")" ]] && continue
         rm -rf "${RELEASES:?}/$old"
         docker image rm "$PROJECT:$old" >/dev/null 2>&1 || true
         log "smazán starý release $old"
@@ -105,7 +107,8 @@ cmd_deploy() {
 
 cmd_up() {
     lock
-    start_release "$(current_release)"
+    use_current
+    start_release "$CURRENT"
 }
 
 cmd_zadani() {
@@ -114,21 +117,24 @@ cmd_zadani() {
     [[ $wait =~ ^[0-9]{1,4}$ ]] && ((wait <= 3600)) || die "čekat = celé číslo sekund 0-3600"
     content=$(head -c "$MAX_CONTENT_BYTES")
     [[ -n $content ]] || content='{}'
+    use_current
     # Zadání posílá člen týmu přes sběrnici; stačí k tomu kontejner s přístupem k databázi.
-    compose "$(current_release)" exec -T ozvena \
+    compose "$CURRENT" exec -T ozvena \
         lihoviny zadani --cekat "$wait" -- "$recipient" "$content"
 }
 
 cmd_overit_llm() {
     local agent=${1:-ozvena}
     [[ $agent =~ $NAME_RE ]] || die "neplatné jméno agenta: '$agent'"
+    use_current
     # Jednorázový kontejner služby agenta: stejné proměnné (klíč, LLM_MODEL_<AGENT>) jako agent.
-    compose "$(current_release)" run --rm --no-deps -T "$agent" \
+    compose "$CURRENT" run --rm --no-deps -T "$agent" \
         lihoviny overit-llm --agent "$agent"
 }
 
 cmd_status() {
-    compose "$(current_release)" ps -a
+    use_current
+    compose "$CURRENT" ps -a
 }
 
 if [[ -n ${SSH_ORIGINAL_COMMAND+x} ]]; then
