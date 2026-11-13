@@ -280,7 +280,8 @@ def test_watched_competitors_come_first_and_other_manufacturers_only_as_unusual_
     assert "Fernet Stock 0,5l, BILLA, 169,90 Kč, o 30 % pod běžnou cenou" in prompt
     assert "výrobce Stock (sledovaný konkurent)" in prompt
     assert "výrobce Mast-Jägermeister\n" in prompt
-    # Sledovaný konkurent je v zadání pro LLM před ostatními, i s menší slevou.
+    # Sledovaný konkurent je v promptu pro LLM před ostatními, i když je jeho
+    # akční cena méně pod běžnou cenou.
     assert prompt.index(f"[F{fernet.id}]") < prompt.index(f"[F{jager.id}]")
 
 

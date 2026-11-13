@@ -217,8 +217,8 @@ ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
 - Text píše LLM s effortem `high` (sběrní agenti `low`), jedno volání nejvýš 4 minuty na
   pokus, celkem 12 minut, tedy uvnitř 15 minut, které po kole Dotazů zbudou z 30 minut
   řídicího agenta. Model mění `LLM_MODEL_ANALYTICKY`.
-- Každé tvrzení odkazuje na zdroj nálezu. Tvrzení, které necituje žádný nález ze zadání pro
-  LLM, agent vypustí; doporučení k produktu mimo portfolio také. Tvrzení jen o výrobcích mimo
+- Každé tvrzení odkazuje na zdroj nálezu. Tvrzení, které necituje žádný nález z promptu
+  pro LLM, agent vypustí; doporučení k produktu mimo portfolio také. Tvrzení jen o výrobcích mimo
   sledované konkurenty přesune do Netypických nálezů, o sledovaných konkurentech dá nahoru.
 - KIQ bez nálezů Brief uvede jako „bez dat“. Selhání posledního sběru (z výsledků, které
   řídicí agent přikládá k Zadání) zkusí doplnit Dotazem (viz Smyčka Dotazů); co se doplnit
