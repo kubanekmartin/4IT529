@@ -1,8 +1,9 @@
-"""Cenový agent (KIQ 2 Promo ceny): akční ceny lihovin a RTD z akcniceny.cz.
+"""Cenový agent (KIQ 2 Akční ceny): akční ceny lihovin a RTD z akcniceny.cz.
 
 Na Zadání projde výpisy akčních cen podle klíčových slov (rum, vodka, gin, likéry, míchaný nápoj…)
 i s jejich dalšími stranami. Výpis ukazuje u každého produktu nabídky jednotlivých řetězců:
-cenu, případně cenu s věrnostní kartou, slevu, platnost a odkaz na leták. Každá nabídka je
+cenu, případně cenu s věrnostní kartou, o kolik procent je pod běžnou cenou, platnost
+a odkaz na leták. Každá nabídka je
 jedna akční cena. Snímek se zapíše při každém Zadání (surové stránky jsou na disku), nález jen
 u akční ceny, která na tabuli ještě není, takže z řady snímků vzniká historie bez duplicit.
 

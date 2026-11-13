@@ -27,7 +27,7 @@ Klíčové zpravodajské téma: produktové, cenové a komunikační aktivity ko
 _Avoid_: zadání, cíl
 
 **KIQ**:
-Jedna ze čtyř klíčových otázek, na které systém odpovídá: 1 Sortiment, 2 Promo ceny, 3 Komunikace, 4 Regulace.
+Jedna ze čtyř klíčových otázek, na které systém odpovídá: 1 Sortiment, 2 Akční ceny, 3 Komunikace, 4 Regulace.
 _Avoid_: oblast, téma
 
 ### Trh
@@ -109,6 +109,14 @@ _Avoid_: zpráva, brief
 **Akční cena**:
 Cena produktu platná jen po omezené období, které je u ní uvedené.
 _Avoid_: promo cena, sleva, akce
+
+**Párování**:
+Přiřazení akční ceny k produktu ze sortimentu, kterého se týká.
+_Avoid_: matching, mapování, propojení
+
+**Spárovaná akční cena**:
+Akční cena, u které je známý její produkt ze sortimentu; nespárovaná akční cena ho zatím nemá (například akční cena na „vybrané druhy“).
+_Avoid_: přiřazená, napárovaná, neznámý produkt
 
 **Cena za litr**:
 Cena přepočtená na jeden litr výrobku.

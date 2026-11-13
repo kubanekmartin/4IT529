@@ -15,7 +15,7 @@ Náš volný zdroj: kategorie lihovin na rohlik.cz a rozdíly v sitemapě.
 | **NielsenIQ – Retail Measurement Services (RMS)** | Data z pokladen na úrovni položky: objem prodejů, podíl na trhu, ceny, distribuce, rychlost obratu a účinnost promo, podle trhu, kanálu a řetězce. | ČR: ano, NIQ vydává data o českém maloobchodě z reálných prodejů. Lihoviny: ano, ale doložené jen sekundárně (ČTK cituje data NIQ o destilátech). Pokrytí jednotlivých řetězců: nepotvrzeno. | Na dotaz | Novou položku konkurence vidí ve všech měřených prodejnách, i v řetězcích bez e-shopu. Navíc ukáže její distribuci a prodeje, tedy zda se novinka chytla. | [RMS](https://nielseniq.com/global/en/products/retail-measurement-services-rms/); [NIQ o ČR](https://nielseniq.com/global/cs/news-center/2024/cesti-spotrebitele-se-zotavuji-z-inflacniho-soku/); [ČTK, 8. 6. 2023 (sekundární)](https://www.ceskenoviny.cz/zpravy/pruzum-ve-sleve-bylo-loni-prodano-61-rychloobratkoveho-zbozi/2376150) |
 | **Euromonitor – Spirits in the Czech Republic** | Roční zpráva (PDF a Excel): objemy a hodnoty podle kategorií 2020–2030, podíly firem a značek, kanály a trendy ve vývoji nových produktů. | ČR i lihoviny: ano (uvádí např. 42% objemový podíl Stock Plzeň-Božkov v roce 2025). | 1 125 EUR za vydání ze srpna 2026 | Dává velikost trhu a podíly značek, které z nabídky jednoho e-shopu nezjistíme. Jednotlivé položky ale průběžně nesleduje, jde o roční rámec. | [Euromonitor](https://www.euromonitor.com/spirits-in-the-czech-republic/report) |
 
-## KIQ 2 Promo ceny
+## KIQ 2 Akční ceny
 
 Náš volný zdroj: akcniceny.cz (jen aktuální akce, bez historie).
 
@@ -60,6 +60,6 @@ Doplňkový uzavřený zdroj: **členství v Unii výrobců a dovozců lihovin �
 ## Doporučení pro report
 
 - **KIQ 1 Sortiment:** V reálném nasazení bychom kupovali data NielsenIQ Retail Measurement Services, která ukazují nové položky konkurence ve všech měřených prodejnách včetně jejich distribuce a prodejů, ne jen nabídku jednoho e-shopu.
-- **KIQ 2 Promo ceny:** Akční ceny bychom místo z akcniceny.cz brali z Ipsos Promo Tracker, který letáky řetězců zpracuje do 24 hodin, páruje je na EAN a vytváří časovou řadu, kterou volný agregátor nedává.
+- **KIQ 2 Akční ceny:** Akční ceny bychom místo z akcniceny.cz brali z Ipsos Promo Tracker, který letáky řetězců zpracuje do 24 hodin, páruje je na EAN a vytváří časovou řadu, kterou volný agregátor nedává.
 - **KIQ 3 Komunikace:** Komunikaci konkurence bychom sledovali přes Monitoring reklamy od admosphere, který zachytí kampaně v TV, na internetu, v tisku, rádiu i OOH s kreativou a ceníkovou hodnotou od roku 2010, ne jen ty, o kterých píše oborový tisk.
 - **KIQ 4 Regulace:** Regulaci bychom hlídali přes ASPI Monitor legislativního procesu (3 990 Kč ročně bez DPH), který denně upozorňuje na změny od legislativního záměru a připomínkového řízení až po Sbírku zákonů, tedy dřív, než se návrh objeví jako sněmovní tisk.

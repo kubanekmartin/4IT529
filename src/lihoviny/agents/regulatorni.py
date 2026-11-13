@@ -123,7 +123,7 @@ class Tisk:
 
 
 class Assessment(BaseModel):
-    id: int = Field(description="ID tisku, jak je uvedené v zadání")
+    id: int = Field(description="ID tisku, jak je uvedené ve vstupu")
     relevant: bool = Field(description="může tisk změnit pravidla pro výrobce lihovin?")
     impact: str = Field(description="jedna až dvě věty česky: co se může pro výrobce změnit")
     impact_level: Literal["vysoký", "střední", "nízký"]
@@ -146,7 +146,7 @@ zdraví před alkoholem, evidence lihu. Názvy tisků bývají obecné: když z 
 zda se tisk lihovin týká, posuď, jak pravděpodobné to je, a nejistotu řekni v dopadu.
 Dopad piš česky, nejvýš dvě věty, konkrétně pro výrobce lihovin. Datum účinnosti odhadni
 z názvu, stavu projednávání a obvyklé praxe (daňové novely často od 1. ledna), jinak null.
-Nic si nevymýšlej; o tiscích víš jen to, co je v zadání.
+Nic si nevymýšlej; o tiscích víš jen to, co je ve vstupu.
 """
 
 

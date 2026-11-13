@@ -67,7 +67,8 @@ LISTING_CATEGORIES = {
     "míchaný nápoj": "rtd",
 }
 PSP_SOURCE = "Poslanecká sněmovna PČR, otevřená data psp.cz"
-# Strop nálezů jedné KIQ v zadání pro LLM; přednost mají sledovaní konkurenti a hluboké slevy.
+# Strop nálezů jedné KIQ v promptu pro LLM; přednost mají sledovaní konkurenti a akční ceny
+# nejvíc pod běžnou cenou.
 PROMPT_LIMIT = 300
 TOP_CHAINS = 10
 
@@ -550,7 +551,8 @@ def _gap_text(failure: dict[str, Any]) -> str:
 
 
 def _priority(podklady: Podklady, finding: Finding) -> tuple[bool, int, int]:
-    """Pořadí v zadání pro LLM: sledovaní konkurenti, pak hlubší sleva, pak novější nález."""
+    """Pořadí v promptu pro LLM: sledovaní konkurenti, pak akční cena víc pod běžnou cenou,
+    pak novější nález."""
     discount = finding.content.get("discount_percent")
     return (
         not podklady.is_watched(finding),
@@ -583,7 +585,7 @@ def _akcni_cena_parts(podklady: Podklady, finding: Finding) -> list[str]:
     parts = [f"akční cena: {content.get('product')}", str(content.get("chain"))]
     parts.append(_kc(content.get("price")))
     if content.get("discount_percent"):
-        parts.append(f"sleva {content['discount_percent']} %")
+        parts.append(f"o {content['discount_percent']} % pod běžnou cenou")
     if content.get("card_price") is not None:
         parts.append(f"s kartou {content.get('card_label')} {_kc(content['card_price'])}")
     if content.get("valid_until"):

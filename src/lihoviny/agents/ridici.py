@@ -310,7 +310,7 @@ class Ridici(Agent):
 
 
 def _dotaz_prompt(dotaz: Message, agent: str) -> str:
-    """Zadání pro LLM z Dotazu; obsah Dotazu je vstup od jiného agenta, proto jen jako text."""
+    """Prompt pro LLM z Dotazu; obsah Dotazu je vstup od jiného agenta, proto jen jako text."""
     return "\n".join(
         [
             f"Sběrný agent: {agent} (KIQ {dotaz.content['kiq']})",

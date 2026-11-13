@@ -96,7 +96,7 @@ class Article:
 
 
 class Assessment(BaseModel):
-    relevant: bool = Field(description="true, když je článek o lihovinách podle zadání")
+    relevant: bool = Field(description="true, když je článek o lihovinách podle pokynů")
     people: list[str] = Field(
         description="jména a příjmení všech fyzických osob z článku, jen pro kontrolu"
     )

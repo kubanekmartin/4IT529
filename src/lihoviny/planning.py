@@ -12,7 +12,7 @@ a analytického agenta, aby se nerozešla.
 
 from datetime import timedelta
 
-KIQS = {1: "Sortiment", 2: "Promo ceny", 3: "Komunikace", 4: "Regulace"}
+KIQS = {1: "Sortiment", 2: "Akční ceny", 3: "Komunikace", 4: "Regulace"}
 # Jeden sběrný agent na KIQ (spec #15): jemu jde Zadání z Dotazu, podle něj Brief přiřadí
 # Selhání ke KIQ.
 SBERNY_AGENT_OF_KIQ = {1: "sortimentni", 2: "cenovy", 3: "medialni", 4: "regulatorni"}

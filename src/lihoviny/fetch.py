@@ -25,7 +25,8 @@ import httpx2
 
 from lihoviny.clock import Clock
 
-# Obecný název projektu, žádná jména ani e-maily (zadání zakazuje osobní údaje).
+# Obecný název projektu, žádná jména ani e-maily (zadání semestrální práce zakazuje
+# osobní údaje).
 USER_AGENT = "lihoviny-mas/0.1 (studijni prototyp, nekomercni)"
 
 _RETRYABLE = {429, 500, 502, 503, 504}
