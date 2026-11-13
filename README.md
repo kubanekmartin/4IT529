@@ -13,8 +13,10 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny |
 | `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s kategorií, cenou za litr a za litr etanolu |
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
+| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
+| `/architektura` | agenti, jejich role a zdroje, diagram komunikace, druhy zpráv a sdílená tabule |
 
 ## Spuštění celého systému
 
@@ -105,6 +107,23 @@ u zdroje, takže všechny akční ceny se stejným názvem patří k jednomu pro
 - Spárovaná akční cena převezme z produktu obsah alkoholu (a objem, když ho název neuvádí)
   a dopočítá cenu za litr etanolu. Web ukáže kategorii u akční ceny, akční ceny u produktu
   na `/sortiment` a nespárované zvlášť na `/akcni-ceny/nesparovane`.
+
+### Mediální agent (KIQ 3, zboziaprodej.cz)
+
+Jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
+jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
+a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
+vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
+LLM žádný článek neposuzuje dvakrát. Potřebuje `ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec medialni lihoviny zadani medialni --cekat 600
+```
+
+Jména osob se neukládají: nález odkazuje na článek krátkým odkazem `?p=<ID>` (adresa se
+slugem opakuje titulek i se jmény), titulek a shrnutí píše LLM bez jmen a agent v nich jména,
+která LLM v článku našel, ještě nahradí slovem „[osoba]“. Články ukáže stránka
+<http://127.0.0.1:8510/komunikace>.
 
 ## Řídicí agent a běhy
 
