@@ -204,7 +204,7 @@ class Analyticky(Agent):
         self.answer(waiting.request, lambda: self._brief(waiting.request.content, waiting.answers))
 
     def _brief(self, content: dict[str, Any], answers: dict[int, Message]) -> dict[str, Any]:
-        """Napíše a uloží Brief; `answers` jsou odpovědi na Dotazy podle KIQ."""
+        """`answers` jsou odpovědi na Dotazy podle KIQ."""
         podklady = self._podklady(content, answers)
         text = (
             self._write(podklady)
@@ -298,36 +298,53 @@ def _failures(content: dict[str, Any], answers: dict[int, Message]) -> list[dict
     Brief neuvádí; u nezaplněné připíše, proč doplnění nevyšlo."""
     if "collection" not in content:
         return [_gap(None, "Zadání nepřišlo od řídicího agenta, výsledky sběru nejsou známé")]
-    collection = content["collection"]
-    if not isinstance(collection, dict) or not isinstance(collection.get("results"), dict):
+    results = _collection_results(content)
+    if results is None:
         return [_gap(None, "zatím neproběhl žádný sběr")]
     failures = []
-    for agent, reason, _ in _collection_gaps(collection["results"]):
-        answer = answers.get(KIQ_OF_AGENT.get(agent))
+    for gap in _collection_gaps(results):
+        reason = gap.reason
+        answer = answers.get(KIQ_OF_AGENT.get(gap.agent))
         if answer is not None:
             if (doplneni := _doplneni_gap(answer)) is None:
                 continue
             reason = f"{reason}; {doplneni}"
-        failures.append(_gap(agent, reason))
+        failures.append(_gap(gap.agent, reason))
     return failures
 
 
-def _collection_gaps(results: dict[str, Any]) -> list[tuple[str, str, bool]]:
-    """Mezery posledního sběru po agentech: (agent, důvod, může je zaplnit nový sběr?).
+def _collection_results(content: dict[str, Any]) -> dict[str, Any] | None:
+    """Výsledky posledního sběru po agentech z obsahu Zadání; None, když žádný sběr nebyl."""
+    collection = content.get("collection")
+    if isinstance(collection, dict) and isinstance(collection.get("results"), dict):
+        return collection["results"]
+    return None
 
-    Sběr, který selhal nebo vrátil prázdný snímek, může nové Zadání zopakovat; sběr, který
-    ještě neodpověděl, pořád běží a nové Zadání by ho jen zdvojilo."""
+
+@dataclass(frozen=True)
+class CollectionGap:
+    agent: str
+    reason: str
+    # Sběr, který selhal nebo vrátil prázdný snímek, může nové Zadání zopakovat; sběr, který
+    # ještě neodpověděl, pořád běží a nové Zadání by ho jen zdvojilo.
+    recollect: bool
+
+
+def _collection_gaps(results: dict[str, Any]) -> list[CollectionGap]:
     gaps = []
     for agent, result in sorted(results.items()):
         if not isinstance(result, dict):
             continue
         match result.get("outcome"):
             case "FAILURE":
-                gaps.append((agent, str(result.get("reason") or "bez důvodu"), True))
+                reason = str(result.get("reason") or "bez důvodu")
+                gaps.append(CollectionGap(agent, reason, recollect=True))
             case None:
-                gaps.append((agent, "v době psaní Briefu sběr ještě neodpověděl", False))
+                reason = "v době psaní Briefu sběr ještě neodpověděl"
+                gaps.append(CollectionGap(agent, reason, recollect=False))
             case _ if result.get("item_count") == 0:
-                gaps.append((agent, "prázdný snímek (0 položek), zdroj je asi rozbitý", True))
+                reason = "prázdný snímek (0 položek), zdroj je asi rozbitý"
+                gaps.append(CollectionGap(agent, reason, recollect=True))
     return gaps
 
 
@@ -343,20 +360,20 @@ def _doplneni_gap(answer: Message) -> str | None:
 def _dotazy(content: dict[str, Any]) -> list[dict[str, Any]]:
     """Dotazy řídicímu agentovi: KIQ, co chybí a návrh doplňujícího sběru, za každou KIQ,
     jejíž mezeru může nový sběr zaplnit; nejvýš MAX_DOTAZY podle čísla KIQ."""
-    collection = content.get("collection")
-    if not isinstance(collection, dict) or not isinstance(collection.get("results"), dict):
+    results = _collection_results(content)
+    if results is None:
         return []
     dotazy = []
-    for agent, reason, recollect in _collection_gaps(collection["results"]):
-        kiq = KIQ_OF_AGENT.get(agent)
-        if kiq is None or not recollect:
+    for gap in _collection_gaps(results):
+        kiq = KIQ_OF_AGENT.get(gap.agent)
+        if kiq is None or not gap.recollect:
             continue
         dotazy.append(
             {
                 "kiq": kiq,
                 "missing": f"KIQ {kiq} {KIQS[kiq]}: chybí data z posledního sběru"
-                f" ({agent}: {reason})",
-                "proposal": f"Zopakovat sběr agenta {agent}, aby Brief měl pro KIQ {kiq}"
+                f" ({gap.agent}: {gap.reason})",
+                "proposal": f"Zopakovat sběr agenta {gap.agent}, aby Brief měl pro KIQ {kiq}"
                 " aktuální snímek.",
             }
         )

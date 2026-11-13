@@ -30,6 +30,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import date
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -91,7 +92,15 @@ _COLUMNS = {
     "zarazeni": "id_osoba id_of cl_funkce od_o do_o od_f do_f",
 }
 _CHAMBER, _CLUB = "11", "1"  # typ_organu: Poslanecká sněmovna (volební období), poslanecký klub
-_MP, _MP_GROUP = "2", "3"  # typ_zakon: navrhovatel poslanec, skupina poslanců
+
+
+class ProposerKind(StrEnum):
+    """Druh navrhovatele tisku (typ_zakon.id_navrh); ostatní kódy jsou zastupitelstva krajů."""
+
+    GOVERNMENT = "1"
+    MP = "2"
+    MP_GROUP = "3"
+    SENATE = "4"
 
 
 class RegulatorniError(Exception):
@@ -226,14 +235,18 @@ class Regulatorni(Agent):
 
     def _read[T](self, url: str, reader: Callable[[bytes], T]) -> tuple[FetchResult, T]:
         """Stáhne archiv a přečte ho. Na disk jde jen přečtená podoba bez jmen (JSON) a otisk
-        původního archivu: archivy psp.cz obsahují jména poslanců."""
-        read: list[T] = []
+        původního archivu: archivy psp.cz obsahují jména poslanců. Archiv se čte jednou,
+        při ukládání na disk, a přečtenou podobu vrátí spolu se staženou odpovědí."""
+        read: T | None = None
 
         def minimize(body: bytes) -> bytes:
-            read.append(reader(body))
-            return _to_json(read[0])
+            nonlocal read
+            read = reader(body)
+            return _to_json(read)
 
-        return self.fetcher.get(url, minimize=minimize), read[0]
+        page = self.fetcher.get(url, minimize=minimize)
+        assert read is not None  # fetcher volá `minimize` u každé úspěšné odpovědi
+        return page, read
 
     def _assess(self, batch: list[Tisk]) -> dict[int, Assessment]:
         """Posudky LLM k dávce tisků podle ID; tisk, který LLM vynechal, v nich chybí."""
@@ -257,7 +270,7 @@ class Chamber:
     memberships: dict[str, list[tuple[str, date, date | None]]]
 
     def club(self, person: str, day: date | None) -> str | None:
-        """Klub, ve kterém byla osoba v daný den (bez data: v kterémkoli)."""
+        """Bez data (tisk bez data předložení) stačí kterýkoli klub osoby."""
         for club, since, until in self.memberships.get(person, []):
             if day is None or (since <= day and (until is None or day < until)):
                 return self.clubs[club]
@@ -265,7 +278,7 @@ class Chamber:
 
 
 def read_chamber(archive: bytes) -> Chamber:
-    """Volební období a kluby z archivu poslanci.zip; tabulku osob (jména) nečte."""
+    """Tabulku osob (jména) záměrně nečte: navrhovatele popíše klub, ne jméno."""
     tables = _tables(archive, "poslanci.zip", "organy zarazeni")
     organ_id, period = _current_period(tables["organy"])
     clubs = {
@@ -291,7 +304,12 @@ def read_tisky(archive: bytes, chamber: Chamber) -> list[Tisk]:
     kinds = {row["id_druh"]: row["nazev_druh"] for row in tables["druh_tisku"]}
     state_types = {row["id_typ"]: row["popis_stavu"] for row in tables["typ_stavu"]}
     states = {row["id_stav"]: state_types.get(row["id_typ"]) for row in tables["stavy"]}
-    proposer = _Proposers(tables, chamber)
+    regions = {
+        row["id_navrh"]: row["druh_navrhovatele"].partition(" - ")[2] for row in tables["typ_zakon"]
+    }
+    people: dict[str, list[str]] = defaultdict(list)
+    for row in sorted(tables["predkladatel"], key=lambda r: int(r["poradi"] or 0)):
+        people[row["id_tisk"]].append(row["id_osoba"])
     return [
         Tisk(
             source_id=int(row["id_tisk"]),
@@ -300,7 +318,7 @@ def read_tisky(archive: bytes, chamber: Chamber) -> list[Tisk]:
             title=row["nazev_tisku"],
             full_title=_full_title(row),
             kind=kinds.get(row["id_druh"], "sněmovní tisk"),
-            proposer=proposer(row),
+            proposer=_proposer(row, regions, people, chamber),
             submitted_on=_parse_date(row["predlozeno"]),
             state=_state(states.get(row["id_stav"])),
             fast_track=row["rj"] == "1",
@@ -310,46 +328,42 @@ def read_tisky(archive: bytes, chamber: Chamber) -> list[Tisk]:
     ]
 
 
-class _Proposers:
-    """Navrhovatel tisku bez jmen: z druhu navrhovatele a poslaneckých klubů předkladatelů."""
+def _proposer(
+    tisk: dict[str, str],
+    regions: dict[str, str],
+    people: dict[str, list[str]],
+    chamber: Chamber,
+) -> str | None:
+    """Navrhovatel tisku bez jmen: z druhu navrhovatele a poslaneckých klubů předkladatelů.
 
-    def __init__(self, tables: dict[str, list[dict[str, str]]], chamber: Chamber):
-        self._kinds = {
-            row["id_navrh"]: row["druh_navrhovatele"].partition(" - ")[2]
-            for row in tables["typ_zakon"]
-        }
-        self._people: dict[str, list[str]] = defaultdict(list)
-        for row in sorted(tables["predkladatel"], key=lambda r: int(r["poradi"] or 0)):
-            self._people[row["id_tisk"]].append(row["id_osoba"])
-        self._chamber = chamber
-
-    def __call__(self, tisk: dict[str, str]) -> str | None:
-        match tisk["id_navrh"]:
-            case "2" | "3" as kind:
-                label = "poslanec" if kind == _MP else "skupina poslanců"
-                people = self._people.get(tisk["id_tisk"]) or [tisk["id_osoba"]]
-                parties = Counter(
-                    club
-                    for person in people
-                    if (club := self._chamber.club(person, _parse_date(tisk["predlozeno"])))
-                )
-                if not parties:
-                    return label
-                return f"{label} ({', '.join(name for name, _ in parties.most_common())})"
-            case "1":
-                role = tisk["navrhovatel"]
-                return f"vláda ({role})" if _ROLE.match(role) else "vláda"
-            case "4":
-                return "Senát"
-            case kind if kind in self._kinds and self._kinds[kind]:
-                return f"zastupitelstvo ({self._kinds[kind]})"
-        # Zprávy a další dokumenty: jen funkce nebo zkratka instituce, nikdy jméno.
-        text = tisk["navrhovatel"]
-        return text if _ROLE.match(text) or _INSTITUTION.fullmatch(text) else None
+    `regions`: druh navrhovatele → název kraje; `people`: ID tisku → ID předkladatelů."""
+    match tisk["id_navrh"]:
+        case ProposerKind.MP | ProposerKind.MP_GROUP as kind:
+            label = "poslanec" if kind == ProposerKind.MP else "skupina poslanců"
+            proposers = people.get(tisk["id_tisk"]) or [tisk["id_osoba"]]
+            parties = Counter(
+                club
+                for person in proposers
+                if (club := chamber.club(person, _parse_date(tisk["predlozeno"])))
+            )
+            if not parties:
+                return label
+            return f"{label} ({', '.join(name for name, _ in parties.most_common())})"
+        case ProposerKind.GOVERNMENT:
+            role = tisk["navrhovatel"]
+            return f"vláda ({role})" if _ROLE.match(role) else "vláda"
+        case ProposerKind.SENATE:
+            return "Senát"
+        case kind if regions.get(kind):
+            return f"zastupitelstvo ({regions[kind]})"
+    # Zprávy a další dokumenty: jen funkce nebo zkratka instituce, nikdy jméno.
+    text = tisk["navrhovatel"]
+    return text if _ROLE.match(text) or _INSTITUTION.fullmatch(text) else None
 
 
 def _tables(body: bytes, archive_name: str, names: str) -> dict[str, list[dict[str, str]]]:
-    """Tabulky UNL z archivu ZIP jako řádky {sloupec: hodnota}."""
+    """Soubory UNL nemají hlavičku: názvy sloupců jsou v `_COLUMNS` podle dokumentace
+    otevřených dat."""
     source = f"{SOURCE} {archive_name}"
     try:
         archive = zipfile.ZipFile(io.BytesIO(body))
@@ -407,7 +421,8 @@ def _full_title(tisk: dict[str, str]) -> str | None:
     """Úplný název bez jmen: „Návrh poslanců Jana X a Petra Y na vydání…“ → „Návrh poslanců na
     vydání…“. Návrh poslanců, ve kterém jména vypustit nejde, úplný název nemá."""
     title = tisk["uplny_nazev_tisku"]
-    if tisk["id_navrh"] in (_MP, _MP_GROUP) or title.startswith("Návrh poslan"):
+    by_mps = tisk["id_navrh"] in (ProposerKind.MP, ProposerKind.MP_GROUP)
+    if by_mps or title.startswith("Návrh poslan"):
         match = _MP_PROPOSAL.match(title)
         return f"{match.group(1)} {title[match.start(2) :]}" if match else None
     return title or None

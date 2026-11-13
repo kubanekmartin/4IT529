@@ -149,7 +149,6 @@ class Cenovy(Agent):
         return offers
 
     def _own_findings(self) -> list[Finding]:
-        """Akční ceny, které už agent zapsal na tabuli."""
         return [
             f for f in self.board.findings(kiq=2) if f.agent == self.name and f.type == "akcni_cena"
         ]
