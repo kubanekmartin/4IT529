@@ -50,6 +50,22 @@ def test_architektura_describes_each_agent_with_role_ci_phase_and_source(
         assert fact in card
 
 
+@pytest.mark.parametrize(
+    ("name", "page", "label"),
+    [
+        ("sortimentni", "/sortiment", "Sortiment"),
+        ("cenovy", "/akcni-ceny", "Akční ceny"),
+        ("medialni", "/komunikace", "Komunikace"),
+        ("regulatorni", "/regulace", "Regulace"),
+        ("analyticky", "/brief", "Brief"),
+    ],
+)
+def test_agent_card_links_to_the_page_with_its_output(web, name, page, label):
+    card = block(web.get("/architektura").text, f"agent-{name}")
+
+    assert f'<a href="{page}">{label}</a>' in card
+
+
 def test_every_registered_agent_except_ozvena_has_a_card(web):
     html = web.get("/architektura").text
 
