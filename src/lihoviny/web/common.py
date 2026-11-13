@@ -33,6 +33,15 @@ def prague_date(value: datetime | None) -> str:
     return czech_date(value.astimezone(PRAGUE))
 
 
+def czech_count(count: int, one: str, few: str, many: str) -> str:
+    """Počet s českým tvarem: 1 položka, 2–4 položky, 0 a 5+ položek."""
+    if count == 1:
+        return f"1 {one}"
+    if 2 <= count <= 4:
+        return f"{count} {few}"
+    return f"{count} {many}"
+
+
 def pretty_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
@@ -52,6 +61,7 @@ templates.env.filters["datum"] = prague_date
 templates.env.filters["json"] = pretty_json
 templates.env.filters["objem"] = volume
 templates.env.filters["procenta"] = percent
+templates.env.filters["pocet"] = czech_count
 
 
 def db(request: Request) -> Iterator[psycopg.Connection]:

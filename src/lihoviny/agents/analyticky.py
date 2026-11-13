@@ -10,6 +10,12 @@
 
 KIQ bez nálezů („bez dat“) a Selhání sběru uvádí Brief sám, LLM o nich nepíše. Když za
 období není jediný nález, LLM se nevolá a Brief vyjde jen s tím, co chybí.
+
+Smyčka Dotazů: když sběr některé KIQ v posledním běhu selhal nebo vrátil prázdný snímek,
+pošle agent ještě před psaním řídicímu agentovi Dotaz (nejvýš 3, jeden za KIQ, jedno kolo)
+a na Zadání Briefu odpoví až po odpovědích na ně: podklady sestaví znovu, takže Brief
+obsahuje i doplněné nálezy, a mezeru, kterou doplnění nezaplnilo, uvede i s důvodem.
+Na co agent čeká, čte z konverzace na sběrnici, takže to přežije i restart služby.
 """
 
 import json
@@ -19,14 +25,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
-from lihoviny.agent import Agent
+from lihoviny.agent import ANSWER_LATER, Agent, AnswerLater
 from lihoviny.board import Finding, Product
-from lihoviny.bus import Message
+from lihoviny.bus import Kind, Message
 from lihoviny.charts import Chart, bar_chart, line_chart, paired_bar_chart
 from lihoviny.clock import PRAGUE
 from lihoviny.products import CATEGORIES, plain_text
@@ -36,11 +42,13 @@ log = logging.getLogger(__name__)
 
 PERIOD = timedelta(days=7)
 # Psaní Briefu je delší úloha než třídění u sběrných agentů: vyšší effort a víc tokenů.
-# Jedno volání trvá nejvýš BRIEF_TIMEOUT × (1 + RETRIES) = 4 min × 3 = 12 minut, takže se
-# vejde do 30 minut, které řídicí agent dává na odpověď (zbytek je rezerva pro Dotazy, #26).
+# Jedno volání trvá nejvýš BRIEF_TIMEOUT × (1 + RETRIES) = 4 min × 3 = 12 minut. Řídicí agent
+# dává na Zadání Briefu 30 minut; odpovědi na Dotazy přijdou nejpozději v 15. minutě, takže
+# i Brief po kole Dotazů je hotový do 27. minuty.
 BRIEF_EFFORT = "high"
 BRIEF_TIMEOUT = 240.0
 BRIEF_MAX_TOKENS = 32000
+MAX_DOTAZY = 3
 
 KIQS = {1: "Sortiment", 2: "Promo ceny", 3: "Komunikace", 4: "Regulace"}
 # Jeden sběrný agent na jednu KIQ (spec #15); podle toho Brief přiřadí Selhání ke KIQ.
@@ -127,25 +135,71 @@ class Podklady:
         return any(maker in WATCHED_COMPETITORS for maker in self.manufacturers[finding.id])
 
 
+@dataclass(frozen=True)
+class WaitingBrief:
+    """Zadání Briefu, na které agent ještě neodpověděl, a jeho Dotazy s odpověďmi."""
+
+    request: Message
+    dotazy: dict[int, int]  # ID Dotazu → KIQ
+    answers: dict[int, Message]  # KIQ → odpověď řídicího agenta na Dotaz
+
+    @property
+    def all_answered(self) -> bool:
+        return len(self.answers) == len(self.dotazy)
+
+
 class Analyticky(Agent):
     name = "analyticky"
     role = "analýza a šíření: týdenní Brief ze sdílené tabule pro ředitele zadavatele"
     llm_timeout = BRIEF_TIMEOUT
     llm_max_tokens = BRIEF_MAX_TOKENS
+    # Komu posílá Dotazy. Zadání od někoho jiného (ruční pokus z CLI) vyjde bez Dotazů.
+    ridici_agent: ClassVar[str] = "ridici"
 
-    def handle_request(self, request: Message) -> dict[str, Any]:
-        podklady = self._podklady(request.content)
+    def handle_request(self, request: Message) -> dict[str, Any] | AnswerLater:
+        dotazy = _dotazy(request.content) if request.sender == self.ridici_agent else []
+        if not dotazy:
+            return self._brief(request.content, answers={})
+        # Všechny Dotazy najednou: řídicí agent je tak dostane dřív než první odpověď
+        # sběrného agenta a kolo Dotazů je opravdu jedno.
+        with self.transaction():
+            for dotaz in dotazy:
+                self.bus.send(
+                    kind=Kind.QUERY,
+                    sender=self.name,
+                    recipient=request.sender,
+                    content=dotaz,
+                    conversation_id=request.conversation_id,
+                )
+        return ANSWER_LATER
+
+    def handle_message(self, message: Message) -> None:
+        if message.kind in (Kind.INFORM, Kind.FAILURE) and "dotaz_id" in message.content:
+            self._dotaz_answered(message)
+        else:
+            super().handle_message(message)
+
+    def _dotaz_answered(self, answer: Message) -> None:
+        """Po odpovědi na poslední Dotaz agent Brief dopíše a odpoví na Zadání Briefu."""
+        waiting = _waiting_brief(self.bus.conversation(answer.conversation_id), self.name)
+        if waiting is None:
+            log.info("%s: odpověď %s na Dotaz, Brief už je hotový", self.name, answer.id)
+        elif waiting.all_answered:
+            self.answer(
+                waiting.request, lambda: self._brief(waiting.request.content, waiting.answers)
+            )
+
+    def _brief(self, content: dict[str, Any], answers: dict[int, Message]) -> dict[str, Any]:
+        """Napíše a uloží Brief; `answers` jsou odpovědi na Dotazy podle KIQ."""
+        podklady = self._podklady(content, answers)
         text = (
             self._write(podklady)
             if podklady.findings
             else BriefText(what_happened=[], unusual=[], recommendations=[])
         )
-        # Smyčka Dotazů (#26) patří sem: z mezer v podkladech nebo v textu vzniknou nejvýš
-        # 3 Dotazy řídicímu agentovi, odpověď na Zadání se odloží a po odpovědích na Dotazy
-        # agent sestaví podklady znovu, text dopíše a teprve pak Brief zveřejní.
         return self._publish(podklady, text)
 
-    def _podklady(self, content: dict[str, Any]) -> Podklady:
+    def _podklady(self, content: dict[str, Any], answers: dict[int, Message]) -> Podklady:
         until = self.clock.now()
         since = until - PERIOD
         findings = {f.id: f for f in self.board.findings_seen(since=since, until=until)}
@@ -159,7 +213,7 @@ class Analyticky(Agent):
             findings=findings,
             products=products,
             manufacturers={i: _manufacturers(f, products, makers) for i, f in findings.items()},
-            failures=_failures(content),
+            failures=_failures(content, answers),
             kiqs_with_snapshot={
                 kiq for agent, kiq in KIQ_OF_AGENT.items() if self.board.snapshots(agent=agent)
             },
@@ -223,25 +277,96 @@ class Analyticky(Agent):
         )
 
 
-def _failures(content: dict[str, Any]) -> list[dict[str, Any]]:
-    """Mezery ve sběru z výsledků posledního sběru, které řídicí agent přikládá k Zadání."""
+def _failures(content: dict[str, Any], answers: dict[int, Message]) -> list[dict[str, Any]]:
+    """Mezery ve sběru z výsledků posledního sběru, které řídicí agent přikládá k Zadání.
+
+    `answers` jsou odpovědi na Dotazy podle KIQ: mezeru, kterou Zadání z Dotazu zaplnilo,
+    Brief neuvádí; u nezaplněné připíše, proč doplnění nevyšlo."""
     if "collection" not in content:
         return [_gap(None, "Zadání nepřišlo od řídicího agenta, výsledky sběru nejsou známé")]
     collection = content["collection"]
     if not isinstance(collection, dict) or not isinstance(collection.get("results"), dict):
         return [_gap(None, "zatím neproběhl žádný sběr")]
     failures = []
-    for agent, result in sorted(collection["results"].items()):
+    for agent, reason, _ in _collection_gaps(collection["results"]):
+        answer = answers.get(KIQ_OF_AGENT.get(agent))
+        if answer is not None:
+            if (doplneni := _doplneni_gap(answer)) is None:
+                continue
+            reason = f"{reason}; {doplneni}"
+        failures.append(_gap(agent, reason))
+    return failures
+
+
+def _collection_gaps(results: dict[str, Any]) -> list[tuple[str, str, bool]]:
+    """Mezery posledního sběru po agentech: (agent, důvod, může je zaplnit nový sběr?).
+
+    Sběr, který selhal nebo vrátil prázdný snímek, může nové Zadání zopakovat; sběr, který
+    ještě neodpověděl, pořád běží a nové Zadání by ho jen zdvojilo."""
+    gaps = []
+    for agent, result in sorted(results.items()):
         if not isinstance(result, dict):
             continue
         match result.get("outcome"):
             case "FAILURE":
-                failures.append(_gap(agent, str(result.get("reason") or "bez důvodu")))
+                gaps.append((agent, str(result.get("reason") or "bez důvodu"), True))
             case None:
-                failures.append(_gap(agent, "v době psaní Briefu sběr ještě neodpověděl"))
+                gaps.append((agent, "v době psaní Briefu sběr ještě neodpověděl", False))
             case _ if result.get("item_count") == 0:
-                failures.append(_gap(agent, "prázdný snímek (0 položek), zdroj je asi rozbitý"))
-    return failures
+                gaps.append((agent, "prázdný snímek (0 položek), zdroj je asi rozbitý", True))
+    return gaps
+
+
+def _doplneni_gap(answer: Message) -> str | None:
+    """Co z mezery zůstalo po odpovědi na Dotaz; None = doplňující sběr ji zaplnil."""
+    if answer.kind is Kind.FAILURE:
+        return f"doplňující sběr na Dotaz selhal: {answer.content.get('reason') or 'bez důvodu'}"
+    if answer.content.get("item_count") == 0:
+        return "doplňující sběr na Dotaz vrátil prázdný snímek"
+    return None
+
+
+def _dotazy(content: dict[str, Any]) -> list[dict[str, Any]]:
+    """Dotazy řídicímu agentovi: KIQ, co chybí a návrh doplňujícího sběru, za každou KIQ,
+    jejíž mezeru může nový sběr zaplnit; nejvýš MAX_DOTAZY podle čísla KIQ."""
+    collection = content.get("collection")
+    if not isinstance(collection, dict) or not isinstance(collection.get("results"), dict):
+        return []
+    dotazy = []
+    for agent, reason, recollect in _collection_gaps(collection["results"]):
+        kiq = KIQ_OF_AGENT.get(agent)
+        if kiq is None or not recollect:
+            continue
+        dotazy.append(
+            {
+                "kiq": kiq,
+                "missing": f"KIQ {kiq} {KIQS[kiq]}: chybí data z posledního sběru"
+                f" ({agent}: {reason})",
+                "proposal": f"Zopakovat sběr agenta {agent}, aby Brief měl pro KIQ {kiq}"
+                " aktuální snímek.",
+            }
+        )
+    return sorted(dotazy, key=lambda dotaz: dotaz["kiq"])[:MAX_DOTAZY]
+
+
+def _waiting_brief(conversation: list[Message], name: str) -> WaitingBrief | None:
+    """Zadání Briefu z konverzace, na které agent `name` ještě neodpověděl, s jeho Dotazy
+    a odpověďmi na ně. Stav se nikam neukládá: celý je na sběrnici a přežije restart."""
+    request = next(
+        (m for m in conversation if m.kind is Kind.REQUEST and m.recipient == name), None
+    )
+    replied = any(m.sender == name and m.kind in (Kind.INFORM, Kind.FAILURE) for m in conversation)
+    if request is None or replied:
+        return None
+    dotazy = {
+        m.id: m.content["kiq"] for m in conversation if m.kind is Kind.QUERY and m.sender == name
+    }
+    answers = {}
+    for m in conversation:
+        dotaz_id = m.content.get("dotaz_id")
+        if m.recipient == name and type(dotaz_id) is int and dotaz_id in dotazy:
+            answers[dotazy[dotaz_id]] = m
+    return WaitingBrief(request, dotazy, answers)
 
 
 def _gap(agent: str | None, reason: str) -> dict[str, Any]:

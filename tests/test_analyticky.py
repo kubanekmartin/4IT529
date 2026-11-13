@@ -18,7 +18,7 @@ from test_cenovy import make_cenovy
 from lihoviny.agents.analyticky import Analyticky, BriefText
 from lihoviny.agents.medialni import Medialni
 from lihoviny.agents.regulatorni import Regulatorni
-from lihoviny.agents.ridici import ANSWER_LIMIT, Ridici
+from lihoviny.agents.ridici import ANSWER_LIMIT, FINISH_TIME, Ridici
 from lihoviny.agents.sortimentni import Sortimentni
 from lihoviny.bus import Kind
 from lihoviny.cli import build_agent
@@ -481,12 +481,21 @@ def test_brief_states_selhani_of_the_last_collection_explicitly(bus, board, make
     }
     llm = FakeLlm(brief_text(what_happened=[(2, "BILLA zlevnila Fernet Stock.", [fernet.id])]))
     send_brief_zadani(bus, board, collection)
+    analyticky = make_agent(Analyticky, llm=llm)
+    analyticky.process_pending()
+    # Na Dotaz o KIQ 1 odpoví řídicí agent Selháním (smyčka Dotazů viz test_dotazy.py).
+    dotaz = bus.claim("ridici")
+    assert (dotaz.kind, dotaz.content["kiq"]) == (Kind.QUERY, 1)
+    bus.reply(dotaz, Kind.FAILURE, {"dotaz_id": dotaz.id, "reason": "rohlik.cz: HTTP 503"})
 
-    make_agent(Analyticky, llm=llm).process_pending()
+    analyticky.process_pending()
 
     html = web.get("/brief").text
     gaps = section(html, "Selhání sběru")
-    assert "<strong>KIQ 1</strong> (sortimentni): rohlik.cz: HTTP 429" in gaps
+    assert (
+        "<strong>KIQ 1</strong> (sortimentni): rohlik.cz: HTTP 429;"
+        " doplňující sběr na Dotaz selhal: rohlik.cz: HTTP 503"
+    ) in gaps
     assert "cenovy" not in gaps
     assert "Selhání sběru: rohlik.cz: HTTP 429" in kiq_block(html, 1)
     assert "KIQ 1 (sortimentni): rohlik.cz: HTTP 429" in llm.calls[0].prompt
@@ -543,7 +552,7 @@ def test_archive_lists_briefs_newest_first_and_an_older_brief_stays_readable(
     assert "Starší Brief" not in web.get(f"/brief/{second_id}").text
 
 
-def test_writing_the_brief_may_take_longer_than_extraction_but_ends_before_ridici_gives_up(
+def test_writing_the_brief_takes_longer_than_extraction_but_fits_after_the_dotazy(
     monkeypatch, database_url
 ):
     attempts = []
@@ -569,32 +578,36 @@ def test_writing_the_brief_may_take_longer_than_extraction_but_ends_before_ridic
         analyticky.llm.ask("Napiš Brief.", BriefText, effort="high")
 
     assert min(attempts) > TIMEOUT  # delší než volání sběrných agentů
-    # Nejhorší případ nechá polovinu limitu řídicího agenta na smyčku Dotazů (#26).
-    assert sum(attempts) <= ANSWER_LIMIT.total_seconds() / 2
+    # Odpovědi na Dotazy přijdou nejpozději FINISH_TIME před koncem limitu řídicího agenta;
+    # i nejhorší případ psaní Briefu (všechny pokusy vyprší) se do té doby vejde i s rezervou
+    # na kolo smyčky služby (30 s), než si agent poslední odpověď vyzvedne.
+    assert sum(attempts) + 30 < FINISH_TIME.total_seconds()
+    assert FINISH_TIME < ANSWER_LIMIT
 
 
 @pytest.mark.parametrize(
     "clock", [FakeClock(datetime(2026, 11, 16, 5, 0, tzinfo=UTC))], ids=["pondeli-6-00"]
 )
-def test_monday_beh_runs_from_ridici_through_sberni_agenti_to_the_brief_on_the_web(
-    board, clock, raw_dir, make_agent, start_agent, web
+def test_monday_beh_runs_from_ridici_through_sberni_agenti_and_dotazy_to_the_brief_on_the_web(
+    board, bus, clock, raw_dir, make_agent, start_agent, web
 ):
     # Cenový agent čte uložené ukázky akcniceny.cz; ostatní sběrní agenti nedostanou stránku
-    # zdroje a ohlásí Selhání. Nálezy čísluje čerstvá databáze od 1; připravený text Briefu
-    # cituje první dvě akční ceny.
+    # zdroje a ohlásí Selhání, a to i na Zadání z Dotazu analytického agenta. Nálezy čísluje
+    # čerstvá databáze od 1; připravený text Briefu cituje první dvě akční ceny.
     llm = FakeLlm(
         brief_text(
             what_happened=[(2, "Řetězce zlevnily tuzemák.", [1, 2])],
             recommendations=[("tuzemak-05", "Tuzemák držet bez akční ceny.", [1])],
         )
     )
+    ridici_llm = FakeLlm(*[{"instruction": "Zopakuj sběr svého zdroje."}] * 3)
     for agent in [
         make_cenovy(make_agent, clock, raw_dir),
         make_agent(Sortimentni),
         make_agent(Medialni),
         make_agent(Regulatorni),
         make_agent(Analyticky, llm=llm),
-        make_agent(Ridici),
+        make_agent(Ridici, llm=ridici_llm),
     ]:
         start_agent(agent, poll_interval=0.1)
 
@@ -613,11 +626,25 @@ def test_monday_beh_runs_from_ridici_through_sberni_agenti_to_the_brief_on_the_w
     assert f'href="{second.source_url}"' in promo
     gaps = section(html, "Selhání sběru")
     assert "<strong>KIQ 1</strong> (sortimentni): https://www.rohlik.cz/c300108072-lihoviny" in gaps
-    assert "<strong>KIQ 3</strong> (medialni): " in gaps
-    assert "<strong>KIQ 4</strong> (regulatorni): " in gaps
+    for kiq, agent in [(1, "sortimentni"), (3, "medialni"), (4, "regulatorni")]:
+        assert gaps.count(f"<strong>KIQ {kiq}</strong> ({agent}): ") == 1
+    assert gaps.count("doplňující sběr na Dotaz selhal") == 3
     assert "cenovy" not in gaps
     assert "Tuzemák držet bez akční ceny." in section(html, "Doporučení k portfoliu zadavatele")
     assert "<strong>bez dat</strong>" in kiq_block(html, 3)
-    [brief_zadani] = board.zadani(board.latest_beh("brief").id)
-    assert brief_zadani.agent == "analyticky"
-    assert wait_until(lambda: board.zadani(brief_zadani.beh_id)[0].outcome == Kind.INFORM)
+    beh_id = board.latest_beh("brief").id
+    assert wait_until(
+        lambda: (
+            {(z.agent, z.outcome) for z in board.zadani(beh_id)}
+            == {
+                ("analyticky", "INFORM"),
+                ("sortimentni", "FAILURE"),
+                ("medialni", "FAILURE"),
+                ("regulatorni", "FAILURE"),
+            }
+        )
+    )
+    [brief_zadani] = [z for z in board.zadani(beh_id) if z.agent == "analyticky"]
+    kinds = [m.kind for m in bus.conversation(brief_zadani.conversation_id)]
+    assert kinds.count(Kind.QUERY) == 3
+    assert len(ridici_llm.calls) == 3

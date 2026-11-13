@@ -302,8 +302,9 @@
         <dd>
           V pondělí čte nálezy všech čtyř KIQ ze sdílené tabule a píše Brief: Co se stalo podle
           KIQ, Netypické nálezy a Doporučení k portfoliu zadavatele, se 3–4 grafy a odkazy na
-          zdroje. Když v nálezech najde mezeru, pošle řídicímu agentovi Dotaz (nejvýš tři na
-          běh) a po odpovědích Brief dopíše. Selhání sběru v Briefu výslovně uvede.
+          zdroje. Když sběr některé KIQ selhal nebo vrátil prázdný snímek, pošle řídicímu
+          agentovi Dotaz (nejvýš tři na běh, jedno kolo) a Brief napíše až po odpovědích.
+          Selhání sběru, které doplnění nezaplnilo, v Briefu výslovně uvede.
         </dd>
         <dt>Vnější zdroj</dt>
         <dd>žádný; čte sdílenou tabuli a portfolio zadavatele</dd>
@@ -330,16 +331,17 @@
   </p>
   <p>
     Tabulka zpráv je zároveň log komunikace: <a href="/log">Log komunikace</a> ukazuje živě
-    každou zprávu, kdo ji komu poslal a kdy, a <a href="/behy">Běhy</a> výsledky jednotlivých
-    Zadání.
+    každou zprávu, kdo ji komu poslal a kdy, seskupené po konverzacích, a
+    <a href="/behy">Běhy</a> výsledky jednotlivých Zadání.
   </p>
   <ul class="kinds">
     <li class="kind REQUEST" id="druh-REQUEST">
       <h3>Zadání <code>REQUEST</code></h3>
       <p>
-        Řídicí agent sběrnému nebo analytickému agentovi: co a kde má zjistit. Každé Zadání má
-        vlastní konverzaci, do které patří i odpověď. Ručně ho může poslat člen týmu
-        (odesílatel <code>clen-tymu</code>), třeba při předvedení.
+        Řídicí agent sběrnému nebo analytickému agentovi: co a kde má zjistit. Každé Zadání
+        z rozvrhu nebo ručního běhu zahajuje vlastní konverzaci, do které patří i odpověď;
+        u Briefu v ní zůstávají i Dotazy, Zadání z Dotazu a odpovědi na ně. Ručně ho může
+        poslat člen týmu (odesílatel <code>clen-tymu</code>), třeba při předvedení.
       </p>
     </li>
     <li class="kind INFORM" id="druh-INFORM">
@@ -354,10 +356,11 @@
     <li class="kind QUERY" id="druh-QUERY">
       <h3>Dotaz <code>QUERY</code></h3>
       <p>
-        Analytický agent řídicímu agentovi, když v nálezech najde mezeru nebo nejasnost: KIQ, co
-        chybí a návrh doplňujícího sběru. Řídicí agent z něj udělá nové Zadání pro příslušného
-        sběrného agenta a jeho výsledek vrátí jako Odpověď. Nejvýš tři Dotazy a jedno kolo
-        zpětné vazby na běh.
+        Analytický agent řídicímu agentovi, když sběr některé KIQ selhal nebo vrátil prázdný
+        snímek: KIQ, co chybí a návrh doplňujícího sběru. Řídicí agent z něj udělá nové Zadání
+        (Zadání z Dotazu) pro sběrného agenta té KIQ a jeho výsledek vrátí jako Odpověď (nebo
+        Selhání). Nejvýš tři Dotazy a jedno kolo zpětné vazby na běh; doplnění musí skončit do
+        15 minut od Zadání Briefu, aby se Brief stihl dopsat do 30 minut.
       </p>
     </li>
     <li class="kind FAILURE" id="druh-FAILURE">
@@ -427,9 +430,10 @@
       sběru, takže Brief ví, který zdroj selhal.
     </li>
     <li>
-      Analytický agent čte nálezy z tabule. Když najde mezeru, pošle řídicímu agentovi Dotaz;
-      ten zadá doplňující sběr a výsledek mu vrátí. Tady se cyklus CI uzavírá zpětnou vazbou
-      a v <a href="/log">logu</a> je vidět jako Dotaz, nové Zadání a dvě Odpovědi.
+      Analytický agent zjistí, který sběr selhal. Za takovou KIQ pošle řídicímu agentovi
+      Dotaz; ten zadá doplňující sběr a výsledek mu vrátí. Tady se cyklus CI uzavírá zpětnou
+      vazbou a v <a href="/log">logu</a> je to v jedné konverzaci se Zadáním Briefu: Dotaz,
+      Zadání z Dotazu a dvě Odpovědi.
     </li>
     <li>
       Analytický agent dopíše Brief, uloží ho na tabuli a řídicímu agentovi odpoví. Web Brief

@@ -9,10 +9,9 @@ import psycopg
 from fastapi import APIRouter, Depends, Request
 from psycopg.rows import class_row
 
-from lihoviny.agents.ridici import ANSWER_LIMIT
 from lihoviny.board import BEH_COLUMNS, ZADANI_COLUMNS, Beh, Zadani
 from lihoviny.bus import Kind
-from lihoviny.web.common import db, prague_time, templates
+from lihoviny.web.common import czech_count, db, prague_time, templates
 
 router = APIRouter()
 
@@ -72,7 +71,7 @@ def behy_page(request: Request, conn: Annotated[psycopg.Connection, Depends(db)]
 
 def _zadani_view(zadani: Zadani) -> ZadaniView:
     if zadani.outcome is None:
-        deadline = prague_time(zadani.sent_at + ANSWER_LIMIT)
+        deadline = prague_time(zadani.deadline)
         return ZadaniView(zadani, f"čeká na odpověď, nejdéle do {deadline}", "waiting")
     if zadani.outcome == Kind.FAILURE:
         return ZadaniView(zadani, f"Selhání: {zadani.reason or 'bez důvodu'}", "failure")
@@ -80,16 +79,8 @@ def _zadani_view(zadani: Zadani) -> ZadaniView:
         return ZadaniView(zadani, "prázdný snímek (0 položek)", "warning")
     if zadani.new_findings is None:
         return ZadaniView(zadani, "odpověděl", "ok")
-    result = _count(zadani.new_findings, "nový nález", "nové nálezy", "nových nálezů")
+    result = czech_count(zadani.new_findings, "nový nález", "nové nálezy", "nových nálezů")
     if zadani.item_count is not None:
-        result += f", ve snímku {_count(zadani.item_count, 'položka', 'položky', 'položek')}"
+        items = czech_count(zadani.item_count, "položka", "položky", "položek")
+        result += f", ve snímku {items}"
     return ZadaniView(zadani, result, "ok")
-
-
-def _count(count: int, one: str, few: str, many: str) -> str:
-    """Počet s českým tvarem: 1 položka, 2–4 položky, 0 a 5+ položek."""
-    if count == 1:
-        return f"1 {one}"
-    if 2 <= count <= 4:
-        return f"{count} {few}"
-    return f"{count} {many}"

@@ -7,7 +7,8 @@ agent akční cenu spáruje s produktem i dodatečně (`record_pairing`), jakmil
 Mediální agent si eviduje viděné články (jen jejich ID u zdroje).
 Regulatorní agent si sem zapisuje ID sněmovních tisků, které už viděl.
 
-Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání a jak každé dopadlo.
+Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání, do kdy čeká na odpověď a jak
+každé dopadlo. Zadání z Dotazu analytického agenta patří do běhu Briefu a pamatuje si Dotaz.
 Analytický agent sem zapisuje Briefy a u každého nálezy, o které se opírá.
 """
 
@@ -94,12 +95,17 @@ BEH_COLUMNS = "id, kind, scheduled_for, started_at"
 
 @dataclass(frozen=True)
 class Zadani:
-    """Zadání v běhu; `outcome` None = agent ještě neodpověděl."""
+    """Zadání v běhu; `outcome` None = agent ještě neodpověděl.
+
+    `dotaz_id` je Dotaz (zpráva QUERY), ze kterého Zadání vzniklo; None u běžného Zadání.
+    """
 
     beh_id: int
     agent: str
     conversation_id: uuid.UUID
     sent_at: datetime
+    deadline: datetime
+    dotaz_id: int | None
     outcome: Literal["INFORM", "FAILURE"] | None
     new_findings: int | None
     item_count: int | None
@@ -108,8 +114,8 @@ class Zadani:
 
 
 ZADANI_COLUMNS = (
-    "beh_id, agent, conversation_id, sent_at, outcome, new_findings, item_count, reason,"
-    " answered_at"
+    "beh_id, agent, conversation_id, sent_at, deadline, dotaz_id, outcome, new_findings,"
+    " item_count, reason, answered_at"
 )
 
 
@@ -368,34 +374,44 @@ class Board:
                 {"kind": kind, "scheduled_for": scheduled_for, "now": self._clock.now()},
             ).fetchone()
 
-    def add_zadani(self, *, beh_id: int, agent: str, conversation_id: uuid.UUID) -> None:
-        """Zapíše Zadání do běhu; od této chvíle běží agentovi limit na odpověď."""
+    def add_zadani(
+        self,
+        *,
+        beh_id: int,
+        agent: str,
+        conversation_id: uuid.UUID,
+        deadline: datetime,
+        dotaz_id: int | None = None,
+    ) -> None:
+        """Zapíše Zadání do běhu; po `deadline` za agenta zapíše Selhání řídicí agent."""
         with self._cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO zadani (beh_id, agent, conversation_id, sent_at)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO zadani (beh_id, agent, conversation_id, sent_at, deadline, dotaz_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                [beh_id, agent, conversation_id, self._clock.now()],
+                [beh_id, agent, conversation_id, self._clock.now(), deadline, dotaz_id],
             )
 
     def record_outcome(
         self,
         conversation_id: uuid.UUID,
+        agent: str,
         outcome: Literal[Kind.INFORM, Kind.FAILURE],
         *,
         new_findings: int | None = None,
         item_count: int | None = None,
         reason: str | None = None,
     ) -> Zadani | None:
-        """Zapíše, jak Zadání dopadlo. Platí první výsledek; jinak (a mimo běh) vrátí None."""
+        """Zapíše, jak dopadlo Zadání agenta v konverzaci. Platí první výsledek; jinak
+        (a mimo běh) vrátí None."""
         with self._cursor(Zadani) as cur:
             return cur.execute(
                 f"""
                 UPDATE zadani
                 SET outcome = %s, new_findings = %s, item_count = %s, reason = %s,
                     answered_at = %s
-                WHERE conversation_id = %s AND outcome IS NULL
+                WHERE conversation_id = %s AND agent = %s AND outcome IS NULL
                 RETURNING {ZADANI_COLUMNS}
                 """,
                 [
@@ -405,6 +421,7 @@ class Board:
                     reason,
                     self._clock.now(),
                     conversation_id,
+                    agent,
                 ],
             ).fetchone()
 
@@ -422,15 +439,28 @@ class Board:
                 [beh_id],
             ).fetchall()
 
-    def waiting_zadani(self, *, sent_before: datetime) -> list[Zadani]:
+    def conversation_zadani(self, conversation_id: uuid.UUID) -> list[Zadani]:
+        """Zadání v jedné konverzaci: Zadání Briefu a Zadání z jeho Dotazů, v pořadí odeslání."""
         with self._cursor(Zadani) as cur:
             return cur.execute(
                 f"""
                 SELECT {ZADANI_COLUMNS} FROM zadani
-                WHERE outcome IS NULL AND sent_at <= %s
+                WHERE conversation_id = %s
                 ORDER BY sent_at, agent
                 """,
-                [sent_before],
+                [conversation_id],
+            ).fetchall()
+
+    def overdue_zadani(self, now: datetime) -> list[Zadani]:
+        """Zadání bez odpovědi, kterým termín `deadline` už vypršel."""
+        with self._cursor(Zadani) as cur:
+            return cur.execute(
+                f"""
+                SELECT {ZADANI_COLUMNS} FROM zadani
+                WHERE outcome IS NULL AND deadline <= %s
+                ORDER BY deadline, agent
+                """,
+                [now],
             ).fetchall()
 
     def record_brief(

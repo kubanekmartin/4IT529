@@ -72,12 +72,14 @@ services:
       - rawdata:/data/raw
 
   # Rozvrh běhů (denní sběr 6:00, Brief v pondělí 7:00, pražský čas) a Selhání po 30 min.
+  # Dotaz analytického agenta převede (LLM) na Zadání z Dotazu pro sběrného agenta.
   # Ruční běh: docker compose exec ridici lihoviny zadani ridici
   ridici:
     <<: *app
     command: ["lihoviny", "agent", "ridici"]
     environment:
       <<: *agent-env
+      LLM_MODEL_RIDICI: ${LLM_MODEL_RIDICI:-}
 
   # KIQ 1: produkty a Novinky z kategorie Lihoviny na rohlik.cz.
   # Ruční běh: docker compose exec sortimentni lihoviny zadani sortimentni --cekat 600

@@ -16,7 +16,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
 | `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím |
 | `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti |
-| `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
+| `/log` | log komunikace agentů (tabulka zpráv sběrnice) po konverzacích |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
 | `/architektura` | agenti, jejich role a zdroje, diagram komunikace, druhy zpráv a sdílená tabule |
 
@@ -171,6 +171,24 @@ Z GitHub Actions jde totéž přes workflow pro ruční Zadání (ticket Nasazen
 obsah `{}` nebo `{"beh": "brief"}`. Odpověď řídicího agenta jen potvrdí zahájení běhu
 (číslo běhu a komu šlo Zadání); výsledky sběrných agentů jsou v logu a na stránce Běhy.
 
+### Smyčka Dotazů
+
+Když sběr některé KIQ v posledním běhu selhal nebo vrátil prázdný snímek, pošle analytický
+agent před psaním Briefu řídicímu agentovi Dotaz (`QUERY`): KIQ, co chybí a návrh doplňujícího
+sběru. Řídicí agent z něj udělá Zadání z Dotazu pro sběrného agenta té KIQ (text Zadání převede
+LLM s effortem `low`, model `LLM_MODEL_RIDICI`) a jeho výsledek pošle zpět jako odpověď na Dotaz.
+Po poslední odpovědi analytický agent Brief napíše; mezeru, kterou doplnění nezaplnilo, uvede
+i s důvodem.
+
+- Nejvýš 3 Dotazy na běh (jeden za KIQ, podle čísla KIQ) a jedno kolo: po první odpovědi
+  řídicí agent další Dotaz odmítne Selháním. Sběr, který ještě neodpověděl, se nezadává znovu.
+- Časový rozpočet: 30 minut na Zadání Briefu platí i s Dotazy. Zadání z Dotazu musí odpovědět
+  do 15 minut od Zadání Briefu (jinak Selhání „bez odpovědi do 15 minut od Zadání Briefu“),
+  takže na napsání Briefu zbude 15 minut a jedno volání LLM trvá nejvýš 12.
+- Celá výměna má ID konverzace Zadání Briefu, takže ji <http://127.0.0.1:8510/log> ukáže
+  pohromadě; Zadání z Dotazu jsou na stránce Běhy v běhu Briefu s označením „z Dotazu“.
+- Ruční Zadání poslané analytickému agentovi přímo (ne přes `ridici`) vyjde bez Dotazů.
+
 ## Analytický agent a Brief
 
 Na Zadání od řídicího agenta (pondělí 7:00 nebo ručně) analytický agent (`analyticky`) napíše
@@ -182,13 +200,14 @@ ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
   znovu (platí dál). Výrobce nálezu bere ze spárovaného produktu, z obsahu nálezu, jinak podle
   značky na začátku názvu akční ceny (značky a výrobce zná z produktů sortimentního agenta).
 - Text píše LLM s effortem `high` (sběrní agenti `low`), jedno volání nejvýš 4 minuty na
-  pokus, celkem 12 minut, tedy uvnitř 30 minut, které řídicí agent čeká na odpověď. Model
-  mění `LLM_MODEL_ANALYTICKY`.
+  pokus, celkem 12 minut, tedy uvnitř 15 minut, které po kole Dotazů zbudou z 30 minut
+  řídicího agenta. Model mění `LLM_MODEL_ANALYTICKY`.
 - Každé tvrzení odkazuje na zdroj nálezu. Tvrzení, které necituje žádný nález ze zadání pro
   LLM, agent vypustí; doporučení k produktu mimo portfolio také. Tvrzení jen o výrobcích mimo
   sledované konkurenty přesune do Netypických nálezů, o sledovaných konkurentech dá nahoru.
 - KIQ bez nálezů Brief uvede jako „bez dat“. Selhání posledního sběru (z výsledků, které
-  řídicí agent přikládá k Zadání) uvede v rámečku nahoře i u dotčené KIQ.
+  řídicí agent přikládá k Zadání) zkusí doplnit Dotazem (viz Smyčka Dotazů); co se doplnit
+  nepodařilo, uvede v rámečku nahoře i u dotčené KIQ.
 - Grafy (akční ceny podle řetězce, akční ceny sledovaných konkurentů podle dne, cena za litr
   etanolu portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
   agent sám z nálezů a ukládá je s Briefem jako SVG; web je vloží bez JavaScriptu. Pod každým

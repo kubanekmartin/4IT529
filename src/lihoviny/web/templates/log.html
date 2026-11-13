@@ -4,10 +4,20 @@
 
 {% block head %}
 <style>
-  .messages { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+  .conversations { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.75rem; }
+  .conversation-head {
+    display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: baseline; margin: 0 0 .5rem;
+  }
+  .conversation-head h2 { font-size: 1.05rem; margin: 0; }
+  .has-query { color: var(--query); font-weight: 600; }
+  .messages {
+    list-style: none; margin: 0; padding: 0 0 0 .75rem; display: grid; gap: .5rem;
+    border-left: 2px solid var(--border);
+  }
   .message {
     background: var(--surface); border: 1px solid var(--border);
     border-left: 4px solid var(--kind-color); border-radius: 6px; padding: .75rem 1rem;
+    min-width: 0;
   }
   .message.REQUEST { --kind-color: var(--request); }
   .message.INFORM { --kind-color: var(--inform); }
@@ -26,22 +36,36 @@
 
 {% block content %}
 <h1>Log komunikace agentů</h1>
-<p class="muted">Každá zpráva mezi agenty, nejnovější nahoře (posledních 200).</p>
+<p class="muted">
+  Každá zpráva mezi agenty, seskupená po konverzacích (posledních {{ limit }}). Konverzace
+  začíná Zadáním; u Briefu do ní patří i Dotazy analytického agenta, Zadání, která z nich
+  řídicí agent udělal, a odpovědi na ně. Nahoře je konverzace s nejnovější zprávou, uvnitř
+  jdou zprávy v pořadí, jak byly odeslány.
+</p>
 
-{% if messages %}
-<ol class="messages">
-  {% for message in messages %}
-  <li class="message {{ message.kind }}">
-    <div class="meta">
-      <span class="kind" title="{{ message.kind }}">{{ kind_labels[message.kind] }}</span>
-      <span class="route">{{ message.sender }} → {{ message.recipient }}</span>
-      <time datetime="{{ message.sent_at.isoformat() }}">{{ message.sent_at | cas }}</time>
+{% if conversations %}
+<ol class="conversations">
+  {% for conversation in conversations %}
+  <li class="conversation" id="konverzace-{{ conversation.id }}">
+    <div class="conversation-head">
+      <h2>Konverzace <code>{{ conversation.id | string | truncate(8, True, "") }}</code></h2>
+      <span class="muted">{{ conversation.messages | length | pocet("zpráva", "zprávy", "zpráv") }}: {{ conversation.agents | join(", ") }}</span>
+      {% if conversation.dotazy %}<span class="has-query">{{ conversation.dotazy | pocet("Dotaz", "Dotazy", "Dotazů") }}</span>{% endif %}
     </div>
-    <div class="details muted">
-      {{ message.kind }} · konverzace <code>{{ message.conversation_id | string | truncate(8, True, "") }}</code>
-      · {% if message.claimed_at %}vyzvednuto {{ message.claimed_at | cas }}{% else %}nevyzvednuto{% endif %}
-    </div>
-    <pre>{{ message.content | json }}</pre>
+    <ol class="messages">
+      {% for message in conversation.messages %}
+      <li class="message {{ message.kind }}">
+        <div class="meta">
+          <span class="kind" title="{{ message.kind }}">{{ kind_labels[message.kind] }}</span> <span class="route">{{ message.sender }} → {{ message.recipient }}</span>
+          <time datetime="{{ message.sent_at.isoformat() }}">{{ message.sent_at | cas }}</time>
+        </div>
+        <div class="details muted">
+          {{ message.kind }} · {% if message.claimed_at %}vyzvednuto {{ message.claimed_at | cas }}{% else %}nevyzvednuto{% endif %}
+        </div>
+        <pre>{{ message.content | json }}</pre>
+      </li>
+      {% endfor %}
+    </ol>
   </li>
   {% endfor %}
 </ol>
