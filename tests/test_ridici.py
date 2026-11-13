@@ -8,6 +8,7 @@ Výsledek běhů (dokončen, varování) se kontroluje přes HTTP na stránce B�
 import time
 from datetime import UTC, datetime
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
@@ -176,6 +177,22 @@ def test_daily_beh_missed_while_ridici_was_down_still_happens_that_day_but_not_t
     clock.advance(hours=15, minutes=59)  # úterý 5:59, restart před termínem
     make_agent(RidiciSNahrazkami).on_idle()
     assert new_zadani(bus, "sberny-a") == []
+
+
+def test_daily_beh_interrupted_while_sending_zadani_starts_again_in_full(
+    bus, make_agent, reject_writes
+):
+    ridici = make_agent(RidiciSNahrazkami)
+    allow = reject_writes("zadani", after=1)  # Zadání pro sberny-a se zapíše, pro sberny-b ne
+    with pytest.raises(psycopg.errors.RaiseException):
+        ridici.on_idle()
+    allow()
+
+    ridici.on_idle()
+
+    zadani_a, zadani_b = new_zadani(bus, "sberny-a"), new_zadani(bus, "sberny-b")
+    assert len(zadani_a) == len(zadani_b) == 1
+    assert zadani_a[0].content == zadani_b[0].content  # oba v témže běhu
 
 
 @pytest.mark.parametrize(

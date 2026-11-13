@@ -9,15 +9,16 @@ sortimentní agent, když produkt poprvé uvidí; nález se na produkt může od
 
 import uuid
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
 import psycopg
-from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 
+from lihoviny import db
 from lihoviny.clock import Clock
 from lihoviny.fetch import FetchResult
 from lihoviny.products import Category
@@ -107,15 +108,15 @@ _ZADANI_COLUMNS = (
 
 class Board:
     def __init__(self, database_url: str, clock: Clock):
-        self._database_url = database_url
+        self.database_url = database_url
         self._clock = clock
 
     def record_snapshot(
         self, *, agent: str, source: str, fetches: Sequence[FetchResult], item_count: int
     ) -> Snapshot:
         """Zapíše snímek zdroje; `fetches` jsou všechna stažení, ze kterých snímek vznikl."""
-        with self._connect(Snapshot) as conn:
-            return conn.execute(
+        with self._cursor(Snapshot) as cur:
+            return cur.execute(
                 f"""
                 INSERT INTO snapshots (agent, source, taken_at, raw_paths, item_count)
                 VALUES (%s, %s, %s, %s, %s)
@@ -125,15 +126,15 @@ class Board:
             ).fetchone()
 
     def snapshot(self, snapshot_id: int) -> Snapshot:
-        with self._connect(Snapshot) as conn:
-            return conn.execute(
+        with self._cursor(Snapshot) as cur:
+            return cur.execute(
                 f"SELECT {_SNAPSHOT_COLUMNS} FROM snapshots WHERE id = %s", [snapshot_id]
             ).fetchone()
 
     def snapshots(self, *, agent: str) -> list[Snapshot]:
         """Všechny snímky agenta od nejstaršího."""
-        with self._connect(Snapshot) as conn:
-            return conn.execute(
+        with self._cursor(Snapshot) as cur:
+            return cur.execute(
                 f"SELECT {_SNAPSHOT_COLUMNS} FROM snapshots WHERE agent = %s ORDER BY id", [agent]
             ).fetchall()
 
@@ -152,8 +153,8 @@ class Board:
         source_product_id: str,
     ) -> Product:
         """Zapíše nově viděný produkt; `first_seen_at` = clock.now()."""
-        with self._connect(Product) as conn:
-            return conn.execute(
+        with self._cursor(Product) as cur:
+            return cur.execute(
                 f"""
                 INSERT INTO products
                     (normalized_key, manufacturer, brand, name, volume_ml, abv, category,
@@ -178,8 +179,8 @@ class Board:
 
     def products(self) -> list[Product]:
         """Všechny produkty v pořadí, jak byly poprvé viděny."""
-        with self._connect(Product) as conn:
-            return conn.execute(f"SELECT {_PRODUCT_COLUMNS} FROM products ORDER BY id").fetchall()
+        with self._cursor(Product) as cur:
+            return cur.execute(f"SELECT {_PRODUCT_COLUMNS} FROM products ORDER BY id").fetchall()
 
     def record_finding(
         self,
@@ -192,8 +193,8 @@ class Board:
         snapshot_id: int | None = None,
         product_id: int | None = None,
     ) -> Finding:
-        with self._connect(Finding) as conn:
-            return conn.execute(
+        with self._cursor(Finding) as cur:
+            return cur.execute(
                 f"""
                 INSERT INTO findings
                     (kiq, agent, type, product_id, snapshot_id, source_url, content, found_at)
@@ -213,8 +214,8 @@ class Board:
             ).fetchone()
 
     def findings(self, *, kiq: int | None = None, snapshot_id: int | None = None) -> list[Finding]:
-        with self._connect(Finding) as conn:
-            return conn.execute(
+        with self._cursor(Finding) as cur:
+            return cur.execute(
                 f"""
                 SELECT {_FINDING_COLUMNS} FROM findings
                 WHERE (%(kiq)s::smallint IS NULL OR kiq = %(kiq)s)
@@ -226,10 +227,10 @@ class Board:
 
     def start_beh(self, kind: DruhBehu, *, scheduled_for: datetime | None = None) -> Beh | None:
         """Zahájí běh. Termín rozvrhu, za který už běh proběhl, vrátí None."""
-        with self._connect(Beh) as conn:
+        with self._cursor(Beh) as cur:
             # NOT EXISTS místo samotného ON CONFLICT: to by při každém pokusu spotřebovalo
             # číslo běhu, a řídicí agent se na termín ptá každých 30 s.
-            return conn.execute(
+            return cur.execute(
                 f"""
                 INSERT INTO behy (kind, scheduled_for, started_at)
                 SELECT %(kind)s, %(scheduled_for)s, %(now)s
@@ -244,8 +245,8 @@ class Board:
 
     def add_zadani(self, *, beh_id: int, agent: str, conversation_id: uuid.UUID) -> None:
         """Zapíše Zadání do běhu; od této chvíle běží agentovi limit na odpověď."""
-        with psycopg.connect(self._database_url) as conn:
-            conn.execute(
+        with self._cursor() as cur:
+            cur.execute(
                 """
                 INSERT INTO zadani (beh_id, agent, conversation_id, sent_at)
                 VALUES (%s, %s, %s, %s)
@@ -262,8 +263,8 @@ class Board:
         reason: str | None = None,
     ) -> Zadani | None:
         """Zapíše, jak Zadání dopadlo. Platí první výsledek; jinak (a mimo běh) vrátí None."""
-        with self._connect(Zadani) as conn:
-            return conn.execute(
+        with self._cursor(Zadani) as cur:
+            return cur.execute(
                 f"""
                 UPDATE zadani
                 SET outcome = %s, new_findings = %s, reason = %s, answered_at = %s
@@ -274,22 +275,22 @@ class Board:
             ).fetchone()
 
     def latest_beh(self, kind: DruhBehu) -> Beh | None:
-        with self._connect(Beh) as conn:
-            return conn.execute(
+        with self._cursor(Beh) as cur:
+            return cur.execute(
                 f"SELECT {_BEH_COLUMNS} FROM behy WHERE kind = %s ORDER BY id DESC LIMIT 1",
                 [kind],
             ).fetchone()
 
     def zadani(self, beh_id: int) -> list[Zadani]:
-        with self._connect(Zadani) as conn:
-            return conn.execute(
+        with self._cursor(Zadani) as cur:
+            return cur.execute(
                 f"SELECT {_ZADANI_COLUMNS} FROM zadani WHERE beh_id = %s ORDER BY agent",
                 [beh_id],
             ).fetchall()
 
     def waiting_zadani(self, *, sent_before: datetime) -> list[Zadani]:
-        with self._connect(Zadani) as conn:
-            return conn.execute(
+        with self._cursor(Zadani) as cur:
+            return cur.execute(
                 f"""
                 SELECT {_ZADANI_COLUMNS} FROM zadani
                 WHERE outcome IS NULL AND sent_at <= %s
@@ -298,5 +299,5 @@ class Board:
                 [sent_before],
             ).fetchall()
 
-    def _connect(self, row_class: type) -> psycopg.Connection:
-        return psycopg.connect(self._database_url, row_factory=class_row(row_class))
+    def _cursor(self, row_class: type | None = None) -> AbstractContextManager[psycopg.Cursor]:
+        return db.cursor(self.database_url, row_class)

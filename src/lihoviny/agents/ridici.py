@@ -52,18 +52,22 @@ class Ridici(Agent):
                 raise BehError(f"neznámý běh {unknown!r}, znám collection a brief")
         return {"beh_id": beh.id, "beh": beh.kind, "sent_to": sent_to}
 
+    # Běh, jeho Zadání a zprávy jsou jedna transakce: kdyby řídicí agent spadl uprostřed,
+    # termín rozvrhu by byl spotřebovaný a část agentů by Zadání nikdy nedostala.
     def _start_collection(self, scheduled_for: datetime | None = None) -> Beh | None:
-        beh = self.board.start_beh("collection", scheduled_for=scheduled_for)
-        if beh is not None:
-            for agent in self.sberni_agenti:
-                self._send_zadani(beh, agent, {"beh_id": beh.id})
+        with self.transaction():
+            beh = self.board.start_beh("collection", scheduled_for=scheduled_for)
+            if beh is not None:
+                for agent in self.sberni_agenti:
+                    self._send_zadani(beh, agent, {"beh_id": beh.id})
         return beh
 
     def _start_brief(self, scheduled_for: datetime | None = None) -> Beh | None:
-        beh = self.board.start_beh("brief", scheduled_for=scheduled_for)
-        if beh is not None:
-            content = {"beh_id": beh.id, "collection": self._last_collection()}
-            self._send_zadani(beh, self.analyst, content)
+        with self.transaction():
+            beh = self.board.start_beh("brief", scheduled_for=scheduled_for)
+            if beh is not None:
+                content = {"beh_id": beh.id, "collection": self._last_collection()}
+                self._send_zadani(beh, self.analyst, content)
         return beh
 
     def _last_collection(self) -> dict[str, Any] | None:
@@ -82,8 +86,6 @@ class Ridici(Agent):
         return {"beh_id": beh.id, "results": results}
 
     def _send_zadani(self, beh: Beh, agent: str, content: dict[str, Any]) -> None:
-        # Nejdřív záznam v běhu, pak zpráva: když agent mezi tím spadne, limit 30 minut
-        # běh stejně ukončí (Selhání), místo aby Zadání odešlo a nikdo na odpověď nečekal.
         conversation_id = uuid.uuid4()
         self.board.add_zadani(beh_id=beh.id, agent=agent, conversation_id=conversation_id)
         self.bus.send(

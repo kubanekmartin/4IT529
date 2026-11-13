@@ -299,3 +299,18 @@ def test_page_without_next_data_becomes_failure_naming_the_page(
     assert reply.kind is Kind.FAILURE
     assert reply.content["reason"] == f"{PAGES['rum']}: stránka nemá __NEXT_DATA__"
     assert board.products() == []
+
+
+def test_write_failure_midway_leaves_nothing_from_the_zadani_on_board(
+    bus, board, clock, raw_dir, make_agent, reject_writes
+):
+    reject_writes("findings", after=1)  # první Novinka se zapíše, druhá už ne
+    llm = FakeLlm(BASELINE_CLASSIFICATION, BASELINE_MANUFACTURERS)
+    agent = make_agent(Sortimentni, fetcher=rohlik(raw_dir, clock), llm=llm)
+
+    reply = run_zadani(bus, agent)
+
+    assert reply.kind is Kind.FAILURE
+    assert board.snapshots(agent="sortimentni") == []
+    assert board.products() == []
+    assert board.findings(kiq=1) == []

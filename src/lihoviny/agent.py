@@ -9,11 +9,13 @@ Práci podle času (rozvrh, limity) dělá `on_idle`, kterou smyčka volá v ka�
 import logging
 import threading
 import time
+from contextlib import AbstractContextManager
 from typing import Any, ClassVar, TypedDict
 
 from lihoviny.board import Board
 from lihoviny.bus import Bus, Kind, Message
 from lihoviny.clock import Clock
+from lihoviny.db import transaction
 from lihoviny.fetch import Fetcher
 from lihoviny.llm import Llm
 
@@ -48,6 +50,10 @@ class Agent:
 
     def on_idle(self) -> None:
         """Volá se v každém kole smyčky, nejméně jednou za `poll_interval`; čas z `self.clock`."""
+
+    def transaction(self) -> AbstractContextManager[None]:
+        """Zápisy na tabuli i zprávy na sběrnici uvnitř bloku se uloží všechny, nebo žádný."""
+        return transaction(self.board.database_url)
 
     def process_pending(self) -> int:
         """Vyzvedne a obslouží všechny čekající zprávy. Vrátí jejich počet."""

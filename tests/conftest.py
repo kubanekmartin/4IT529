@@ -51,6 +51,40 @@ def web_database_url(database_url, web_user):
 
 
 @pytest.fixture
+def reject_writes(database_url):
+    """Databáze přijme do tabulky jen `after` řádků a další zápis odmítne, jako by agent spadl
+    uprostřed práce nebo došlo místo na disku. Vrací funkci, která odmítání zase vypne."""
+
+    def reject(table, *, after):
+        with psycopg.connect(database_url) as conn:
+            conn.execute(
+                sql.SQL(
+                    """
+                    CREATE FUNCTION reject_write() RETURNS trigger LANGUAGE plpgsql AS $$
+                    BEGIN
+                        IF (SELECT count(*) FROM {table}) >= {after} THEN
+                            RAISE EXCEPTION 'zápis odmítnut (test)';
+                        END IF;
+                        RETURN NEW;
+                    END $$;
+                    CREATE TRIGGER reject_write BEFORE INSERT ON {table}
+                    FOR EACH ROW EXECUTE FUNCTION reject_write();
+                    """
+                ).format(table=sql.Identifier(table), after=sql.Literal(after))
+            )
+
+        def allow():
+            with psycopg.connect(database_url) as conn:
+                conn.execute(
+                    sql.SQL("DROP TRIGGER reject_write ON {}").format(sql.Identifier(table))
+                )
+
+        return allow
+
+    return reject
+
+
+@pytest.fixture
 def clock():
     return FakeClock(datetime(2026, 11, 16, 6, 0, tzinfo=UTC))
 

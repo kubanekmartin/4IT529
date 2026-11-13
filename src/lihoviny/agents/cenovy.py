@@ -82,23 +82,25 @@ class Cenovy(Agent):
         if not offers:
             raise CenovyError(f"{SOURCE}: ve výpisech není žádná akční cena (změnila se stránka?)")
 
-        snapshot = self.board.record_snapshot(
-            agent=self.name, source=SOURCE, fetches=pages, item_count=len(offers)
-        )
         known = self._known_offer_keys()
         new_findings = 0
-        for key, (product_url, content) in offers.items():
-            if key in known:
-                continue
-            self.board.record_finding(
-                kiq=2,
-                agent=self.name,
-                type="akcni_cena",
-                snapshot_id=snapshot.id,
-                source_url=product_url,
-                content=content,
+        # Snímek a jeho nálezy jedna transakce: pád uprostřed nenechá na tabuli půl snímku.
+        with self.transaction():
+            snapshot = self.board.record_snapshot(
+                agent=self.name, source=SOURCE, fetches=pages, item_count=len(offers)
             )
-            new_findings += 1
+            for key, (product_url, content) in offers.items():
+                if key in known:
+                    continue
+                self.board.record_finding(
+                    kiq=2,
+                    agent=self.name,
+                    type="akcni_cena",
+                    snapshot_id=snapshot.id,
+                    source_url=product_url,
+                    content=content,
+                )
+                new_findings += 1
         return OdpovedSberu(snapshot_id=snapshot.id, new_findings=new_findings)
 
     def _read_listing(self, url: str, pages: list[FetchResult]) -> list[Offer]:

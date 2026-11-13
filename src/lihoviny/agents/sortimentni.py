@@ -162,18 +162,23 @@ class Sortimentni(Agent):
         previous = self.board.snapshots(agent=self.name)
         baseline = not previous
         watermark = _baseline_watermark(previous, known.values())
-        snapshot = self.board.record_snapshot(
-            agent=self.name, source=SOURCE, fetches=[root, *pages], item_count=len(in_snapshot)
-        )
         new_findings = 0
-        for product in unrecorded:
-            stored = self._record_product(product, snapshot.id)
-            # Výchozí snímek: jen štítek prodejce. Později: ID u zdroje novější než výchozí stav.
-            is_novinka = product.labelled_new if baseline else product.first.source_id > watermark
-            if is_novinka:
-                note = SELLER_NOTE if baseline else None
-                self._record_novinka(stored, snapshot.id, product.labelled_new, note)
-                new_findings += 1
+        # Snímek, produkty a Novinky jedna transakce: neúplný výchozí snímek by později
+        # udělal z běžných produktů falešné Novinky.
+        with self.transaction():
+            snapshot = self.board.record_snapshot(
+                agent=self.name, source=SOURCE, fetches=[root, *pages], item_count=len(in_snapshot)
+            )
+            for product in unrecorded:
+                stored = self._record_product(product, snapshot.id)
+                # Výchozí snímek: jen štítek prodejce. Později: ID u zdroje vyšší než výchozí stav.
+                is_novinka = (
+                    product.labelled_new if baseline else product.first.source_id > watermark
+                )
+                if is_novinka:
+                    note = SELLER_NOTE if baseline else None
+                    self._record_novinka(stored, snapshot.id, product.labelled_new, note)
+                    new_findings += 1
         log.info(
             "snímek %s: %s produktů, z toho %s nových, %s novinek",
             snapshot.id,

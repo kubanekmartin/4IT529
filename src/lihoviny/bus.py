@@ -7,16 +7,16 @@ Vyzvednutí řádek hned označí (`claimed_at`), takže každou zprávu zpracuj
 import time
 import uuid
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
 import psycopg
-from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 
+from lihoviny import db
 from lihoviny.clock import Clock
 
 
@@ -49,7 +49,7 @@ _COLUMNS = "id, conversation_id, kind, sender, recipient, content, sent_at, clai
 
 class Bus:
     def __init__(self, database_url: str, clock: Clock):
-        self._database_url = database_url
+        self.database_url = database_url
         self._clock = clock
 
     def send(
@@ -62,8 +62,8 @@ class Bus:
         conversation_id: uuid.UUID | None = None,
     ) -> Message:
         """Pošle zprávu; bez `conversation_id` začne novou konverzaci."""
-        with self._connect() as conn:
-            return conn.execute(
+        with self._cursor() as cur:
+            return cur.execute(
                 f"""
                 INSERT INTO messages (conversation_id, kind, sender, recipient, content, sent_at)
                 VALUES (%s, %s, %s, %s, %s, %s)
@@ -90,8 +90,8 @@ class Bus:
 
     def claim(self, recipient: str) -> Message | None:
         """Vyzvedne nejstarší nevyzvednutou zprávu pro příjemce, nebo vrátí None."""
-        with self._connect() as conn:
-            return conn.execute(
+        with self._cursor() as cur:
+            return cur.execute(
                 f"""
                 UPDATE messages SET claimed_at = %s
                 WHERE id = (
@@ -107,20 +107,20 @@ class Bus:
             ).fetchone()
 
     def conversation(self, conversation_id: uuid.UUID) -> list[Message]:
-        with self._connect() as conn:
-            return conn.execute(
+        with self._cursor() as cur:
+            return cur.execute(
                 f"SELECT {_COLUMNS} FROM messages WHERE conversation_id = %s ORDER BY id",
                 [conversation_id],
             ).fetchall()
 
     @contextmanager
     def listen(self, recipient: str) -> Iterator["Inbox"]:
-        with psycopg.connect(self._database_url, autocommit=True) as conn:
+        with psycopg.connect(self.database_url, autocommit=True) as conn:
             conn.execute("LISTEN messages")
             yield Inbox(conn, recipient)
 
-    def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self._database_url, row_factory=class_row(Message))
+    def _cursor(self) -> AbstractContextManager[psycopg.Cursor]:
+        return db.cursor(self.database_url, Message)
 
 
 class Inbox:

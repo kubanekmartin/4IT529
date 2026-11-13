@@ -323,3 +323,18 @@ def test_listings_without_any_offer_are_failure_not_zero_akcni_ceny(
     assert reply.kind is Kind.FAILURE
     assert "žádná akční cena" in reply.content["reason"]
     assert board.findings(kiq=2) == []
+
+
+def test_write_failure_midway_leaves_nothing_from_the_zadani_on_board(
+    bus, board, clock, raw_dir, make_agent, reject_writes
+):
+    reject_writes("findings", after=1)  # první akční cena se zapíše, druhá už ne
+    cenovy = make_cenovy(make_agent, clock, raw_dir)
+    zadani = send_zadani(bus)
+
+    cenovy.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.FAILURE
+    assert board.snapshots(agent="cenovy") == []
+    assert board.findings(kiq=2) == []
