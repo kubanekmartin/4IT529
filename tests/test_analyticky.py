@@ -18,12 +18,13 @@ from test_cenovy import make_cenovy
 from lihoviny.agents.analyticky import Analyticky, BriefText
 from lihoviny.agents.medialni import Medialni
 from lihoviny.agents.regulatorni import Regulatorni
-from lihoviny.agents.ridici import ANSWER_LIMIT, FINISH_TIME, Ridici
+from lihoviny.agents.ridici import Ridici, ZadaniZDotazu
 from lihoviny.agents.sortimentni import Sortimentni
 from lihoviny.bus import Kind
 from lihoviny.cli import build_agent
 from lihoviny.clock import FakeClock
 from lihoviny.llm import TIMEOUT, FakeLlm
+from lihoviny.planning import ANSWER_LIMIT, FINISH_TIME, MAX_DOTAZY
 from lihoviny.web.app import create_app
 
 ROHLIK = "https://www.rohlik.cz/"
@@ -552,37 +553,45 @@ def test_archive_lists_briefs_newest_first_and_an_older_brief_stays_readable(
     assert "Starší Brief" not in web.get(f"/brief/{second_id}").text
 
 
-def test_writing_the_brief_takes_longer_than_extraction_but_fits_after_the_dotazy(
-    monkeypatch, database_url
-):
+REAL_ANTHROPIC = anthropic.Anthropic
+
+
+def llm_attempts(monkeypatch, database_url, agent, schema, effort):
+    """Limity pokusů jednoho volání LLM, když API neodpovídá, u agenta sestaveného tak,
+    jak ho spouští služba v compose."""
     attempts = []
 
     def hanging_api(request):
         attempts.append(request.extensions["timeout"]["read"])
         raise httpx2.ReadTimeout("API neodpovídá", request=request)
 
-    real_client = anthropic.Anthropic
     monkeypatch.setattr(
         anthropic,
         "Anthropic",
-        lambda **kwargs: real_client(
+        lambda **kwargs: REAL_ANTHROPIC(
             **kwargs,
             api_key="test-bez-hodnoty",
             http_client=httpx2.Client(transport=httpx2.MockTransport(hanging_api)),
         ),
     )
     monkeypatch.setenv("DATABASE_URL", database_url)
-    analyticky = build_agent("analyticky")  # tak, jak ho spouští služba v compose
-
     with pytest.raises(anthropic.APITimeoutError):
-        analyticky.llm.ask("Napiš Brief.", BriefText, effort="high")
+        build_agent(agent).llm.ask("Text.", schema, effort=effort)
+    return attempts
 
-    assert min(attempts) > TIMEOUT  # delší než volání sběrných agentů
-    # Odpovědi na Dotazy přijdou nejpozději FINISH_TIME před koncem limitu řídicího agenta;
-    # i nejhorší případ psaní Briefu (všechny pokusy vyprší) se do té doby vejde i s rezervou
-    # na kolo smyčky služby (30 s), než si agent poslední odpověď vyzvedne.
-    assert sum(attempts) + 30 < FINISH_TIME.total_seconds()
-    assert FINISH_TIME < ANSWER_LIMIT
+
+def test_brief_with_dotazy_fits_into_the_answer_limit_even_when_every_llm_call_times_out(
+    monkeypatch, database_url
+):
+    brief = llm_attempts(monkeypatch, database_url, "analyticky", BriefText, "high")
+    dotaz = llm_attempts(monkeypatch, database_url, "ridici", ZadaniZDotazu, "low")
+
+    assert min(brief) > TIMEOUT  # psaní Briefu má delší limit než volání sběrných agentů
+    # Převody všech Dotazů na Zadání zaberou nejvýš polovinu času na doplňující sběr.
+    assert MAX_DOTAZY * sum(dotaz) <= (ANSWER_LIMIT - FINISH_TIME).total_seconds() / 2
+    # Odpovědi na Dotazy přijdou nejpozději FINISH_TIME před koncem limitu; nejhorší psaní
+    # Briefu se do té doby vejde i s kolem smyčky služby (30 s), než agent odpověď vyzvedne.
+    assert sum(brief) + 30 < FINISH_TIME.total_seconds()
 
 
 @pytest.mark.parametrize(

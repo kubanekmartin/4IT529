@@ -16,19 +16,20 @@ from lihoviny.agent import Agent
 from lihoviny.board import Beh, Zadani
 from lihoviny.bus import Kind, Message
 from lihoviny.clock import PRAGUE
+from lihoviny.planning import (
+    ANSWER_LIMIT,
+    DOTAZ_LLM_RETRIES,
+    DOTAZ_LLM_TIMEOUT,
+    FINISH_TIME,
+    MAX_DOTAZY,
+    SBERNY_AGENT_OF_KIQ,
+)
 
 log = logging.getLogger(__name__)
 
 COLLECTION_AT = time(6, 0)  # denní sběr, pražský čas
 BRIEF_AT = time(7, 0)  # Brief v pondělí, pražský čas
 MONDAY = 0
-ANSWER_LIMIT = timedelta(minutes=30)
-# Časový rozpočet Briefu: 30 minut na Zadání Briefu platí i s kolem Dotazů. Zadání z Dotazu
-# proto musí odpovědět FINISH_TIME před termínem Zadání, ze kterého Dotaz vzešel (u Briefu
-# do 15 minut od Zadání), a analytickému agentovi zbude 15 minut na dopsání Briefu: jedno
-# volání LLM trvá nejvýš 12 minut (Analyticky.llm_timeout × 3 pokusy).
-FINISH_TIME = timedelta(minutes=15)
-MAX_DOTAZY = 3  # na jeden běh, v jednom kole
 
 _DOTAZ_SYSTEM = """\
 Jsi řídicí agent systému konkurenčního zpravodajství pro českého výrobce lihovin. Analytický
@@ -59,19 +60,15 @@ class Ridici(Agent):
 
     name = "ridici"
     role = "plánování: rozvrh běhů, Zadání sběrným agentům, Selhání po 30 minutách, Dotazy"
+    # LLM jen převádí krátký Dotaz na Zadání; časový rozpočet v `lihoviny.planning`.
+    llm_timeout = DOTAZ_LLM_TIMEOUT
+    llm_retries = DOTAZ_LLM_RETRIES
 
     # Sběrní agenti, kterým běh sběru pošle Zadání. Nový sběrný agent = jeho jméno sem
     # (a třída v AGENTS). Ozvěna sem nepatří, není sběrná.
     sberni_agenti: ClassVar[tuple[str, ...]] = ("sortimentni", "cenovy", "medialni", "regulatorni")
     # Analytický agent, kterému běh Briefu pošle Zadání; bez něj se Brief nezadává.
     analyst: ClassVar[str | None] = "analyticky"
-    # Kdo sbírá data pro kterou KIQ (jeden sběrný agent na KIQ): jemu jde Zadání z Dotazu.
-    sberni_agenti_podle_kiq: ClassVar[dict[int, str]] = {
-        1: "sortimentni",
-        2: "cenovy",
-        3: "medialni",
-        4: "regulatorni",
-    }
 
     def handle_request(self, request: Message) -> dict[str, Any]:
         match request.content.get("beh", "collection"):
@@ -182,7 +179,7 @@ class Ridici(Agent):
 
     def _send_zadani_from_dotaz(self, dotaz: Message) -> None:
         kiq = dotaz.content.get("kiq")
-        agent = self.sberni_agenti_podle_kiq.get(kiq) if type(kiq) is int else None
+        agent = SBERNY_AGENT_OF_KIQ.get(kiq) if type(kiq) is int else None
         if agent is None:
             raise DotazError(f"Dotaz bez platné KIQ ({kiq!r}), řídicí agent zná KIQ 1–4")
         # Dotaz patří k Zadání, na které tazatel v téže konverzaci ještě neodpověděl.

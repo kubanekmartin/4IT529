@@ -94,7 +94,10 @@ def build_agent(name: str) -> Agent:
             min_delay=agent_class.fetch_delay,
         ),
         llm=ClaudeLlm.for_agent(
-            name, timeout=agent_class.llm_timeout, max_tokens=agent_class.llm_max_tokens
+            name,
+            timeout=agent_class.llm_timeout,
+            retries=agent_class.llm_retries,
+            max_tokens=agent_class.llm_max_tokens,
         ),
         clock=clock,
     )

@@ -36,24 +36,23 @@ from lihoviny.board import Finding, Product
 from lihoviny.bus import Kind, Message
 from lihoviny.charts import Chart, bar_chart, line_chart, paired_bar_chart
 from lihoviny.clock import PRAGUE
+from lihoviny.planning import (
+    BRIEF_LLM_RETRIES,
+    BRIEF_LLM_TIMEOUT,
+    KIQ_OF_AGENT,
+    KIQS,
+    MAX_DOTAZY,
+)
 from lihoviny.products import CATEGORIES, plain_text
 from lihoviny.zadavatel import PORTFOLIO, WATCHED_COMPETITORS
 
 log = logging.getLogger(__name__)
 
 PERIOD = timedelta(days=7)
-# Psaní Briefu je delší úloha než třídění u sběrných agentů: vyšší effort a víc tokenů.
-# Jedno volání trvá nejvýš BRIEF_TIMEOUT × (1 + RETRIES) = 4 min × 3 = 12 minut. Řídicí agent
-# dává na Zadání Briefu 30 minut; odpovědi na Dotazy přijdou nejpozději v 15. minutě, takže
-# i Brief po kole Dotazů je hotový do 27. minuty.
+# Psaní Briefu je delší úloha než třídění u sběrných agentů: vyšší effort a víc tokenů;
+# časový rozpočet (i s kolem Dotazů) je v `lihoviny.planning`.
 BRIEF_EFFORT = "high"
-BRIEF_TIMEOUT = 240.0
 BRIEF_MAX_TOKENS = 32000
-MAX_DOTAZY = 3
-
-KIQS = {1: "Sortiment", 2: "Promo ceny", 3: "Komunikace", 4: "Regulace"}
-# Jeden sběrný agent na jednu KIQ (spec #15); podle toho Brief přiřadí Selhání ke KIQ.
-KIQ_OF_AGENT = {"sortimentni": 1, "cenovy": 2, "medialni": 3, "regulatorni": 4}
 # Kategorie akční ceny podle výpisu akcniceny.cz, dokud ji párování (#22) nezná z produktu.
 LISTING_CATEGORIES = {
     "tuzemák, rum": "rum_tuzemak",
@@ -152,7 +151,8 @@ class WaitingBrief:
 class Analyticky(Agent):
     name = "analyticky"
     role = "analýza a šíření: týdenní Brief ze sdílené tabule pro ředitele zadavatele"
-    llm_timeout = BRIEF_TIMEOUT
+    llm_timeout = BRIEF_LLM_TIMEOUT
+    llm_retries = BRIEF_LLM_RETRIES
     llm_max_tokens = BRIEF_MAX_TOKENS
     # Komu posílá Dotazy. Zadání od někoho jiného (ruční pokus z CLI) vyjde bez Dotazů.
     ridici_agent: ClassVar[str] = "ridici"

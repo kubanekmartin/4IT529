@@ -15,11 +15,12 @@ from test_analyticky import brief_text, kiq_block, section
 from test_cenovy import make_cenovy
 from test_ridici import answer, fail, new_zadani, zadani_for
 
-from lihoviny.agents.analyticky import KIQ_OF_AGENT, Analyticky
+from lihoviny.agents.analyticky import Analyticky
 from lihoviny.agents.ridici import Ridici
 from lihoviny.bus import Kind
 from lihoviny.clock import FakeClock
 from lihoviny.llm import FakeLlm
+from lihoviny.planning import KIQS, SBERNY_AGENT_OF_KIQ
 from lihoviny.web.app import create_app
 
 SBERNI_AGENTI = ["sortimentni", "cenovy", "medialni", "regulatorni"]
@@ -333,9 +334,9 @@ def test_answer_to_zadani_z_dotazu_whose_dotaz_is_elsewhere_is_still_recorded(
     assert [(z.agent, z.outcome) for z in board.zadani(beh.id)] == [("cenovy", "INFORM")]
 
 
-def test_ridici_and_analyst_agree_on_the_sberny_agent_of_each_kiq():
-    assert Ridici.sberni_agenti_podle_kiq == {kiq: agent for agent, kiq in KIQ_OF_AGENT.items()}
-    assert set(Ridici.sberni_agenti_podle_kiq.values()) == set(Ridici.sberni_agenti)
+def test_every_kiq_has_a_sberny_agent_that_ridici_sends_zadani_to():
+    assert set(SBERNY_AGENT_OF_KIQ) == set(KIQS)
+    assert set(SBERNY_AGENT_OF_KIQ.values()) == set(Ridici.sberni_agenti)
 
 
 def test_log_shows_the_whole_dotaz_exchange_together_as_one_conversation(
