@@ -116,7 +116,8 @@ Jedním požadavkem na WordPress REST API načte posledních 30 článků i s te
 jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
 a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
 vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
-LLM žádný článek neposuzuje dvakrát. Posouzený článek se zapíše hned; když LLM u některého
+LLM žádný článek neposuzuje dvakrát. První snímek tak udělá nálezy ze všech asi 30 článků
+výpisu (zhruba dvou týdnů), další už jen z nových. Posouzený článek se zapíše hned; když LLM u některého
 článku selže, ostatní zůstanou zapsané a příští Zadání posoudí jen ty zbylé (Selhání je
 odpovědí, jen když LLM selže u všech). Potřebuje `ANTHROPIC_API_KEY`:
 
@@ -185,7 +186,9 @@ agent před psaním Briefu řídicímu agentovi Dotaz (`QUERY`): KIQ, co chybí 
 sběru. Řídicí agent z něj udělá Zadání z Dotazu pro sběrného agenta té KIQ (text Zadání převede
 LLM s effortem `low`, model `LLM_MODEL_RIDICI`) a jeho výsledek pošle zpět jako odpověď na Dotaz.
 Po poslední odpovědi analytický agent Brief napíše; mezeru, kterou doplnění nezaplnilo, uvede
-i s důvodem.
+i s důvodem. Sběrní agenti text instrukce ze Zadání z Dotazu záměrně nečtou a zopakují celý
+svůj sběr: mezeru vždy způsobil chybějící nebo prázdný snímek a nový snímek ji zaplní celou.
+Instrukce zůstává v logu komunikace jako doklad, o co analytický agent žádal.
 
 - Nejvýš 3 Dotazy na běh (jeden za KIQ, podle čísla KIQ) a jedno kolo: po první odpovědi
   řídicí agent další Dotaz odmítne Selháním. Sběr, který ještě neodpověděl, se nezadává znovu.
