@@ -88,10 +88,20 @@ def parse_volume_ml(text: str) -> int | None:
     return round(ml)
 
 
+def remove_volume(text: str) -> str:
+    """Název bez údaje o objemu: „Jägermeister 700ml“ → „Jägermeister “. Akční ceny mají objem
+    v názvu, produkty z Rohlíku ne; před porovnáním klíčů se proto z názvu vynechá."""
+    return _VOLUME.sub(" ", text)
+
+
 def product_key(name: str, volume_ml: int, abv: Decimal) -> str:
     """Normalizovaný klíč produktu: „značka a název|objem v ml|obsah alkoholu“."""
-    words = _PACKAGING.sub(" ", _ABV.sub(" ", name))
-    return f"{plain_text(words)}|{volume_ml}|{abv.normalize():f}"
+    return f"{name_key(name)}|{volume_ml}|{abv.normalize():f}"
+
+
+def name_key(name: str) -> str:
+    """Část klíče za značku a název: bez obsahu alkoholu, slov o dárkovém balení a diakritiky."""
+    return plain_text(_PACKAGING.sub(" ", _ABV.sub(" ", name)))
 
 
 def plain_text(text: str) -> str:
