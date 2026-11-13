@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.bus import Message
@@ -27,6 +27,7 @@ from lihoviny.products import parse_abv, parse_volume_ml
 
 SOURCE = "akcniceny.cz"
 BASE_URL = "https://www.akcniceny.cz"
+SOURCE_HOSTS = {"www.akcniceny.cz", "akcniceny.cz"}
 LISTING_URL = BASE_URL + "/zbozi/napoje-alkoholicke/{}/"
 
 # Výpisy nápojů alkoholických podle klíčového slova: (slovo v adrese, jak ho uvádí zdroj).
@@ -113,7 +114,7 @@ class Cenovy(Agent):
                 break
             page = self.fetcher.get(next_url)
             pages.append(page)
-            page_offers, next_url = _parse_listing(page.text)
+            page_offers, next_url = _parse_listing(page)
             offers.extend(page_offers)
         return offers
 
@@ -125,27 +126,31 @@ class Cenovy(Agent):
         }
 
 
-def _parse_listing(page: str) -> tuple[list[Offer], str | None]:
+def _parse_listing(page: FetchResult) -> tuple[list[Offer], str | None]:
     """Nabídky ze strany výpisu a adresa další strany (None na poslední straně).
 
     Sponzorované produkty nahoře výpisu (TOP) se přeskakují: nejsou z dané kategorie.
     """
+    text = page.text
     offers: list[Offer] = []
-    starts = list(_PRODUCT.finditer(page))
+    starts = list(_PRODUCT.finditer(text))
     for index, match in enumerate(starts):
-        limit = starts[index + 1].start() if index + 1 < len(starts) else len(page)
-        end = page.find(f'href="#prodejci{match.group(1)}"', match.end(), limit)
-        offers.extend(_parse_product(page[match.end() : end if end != -1 else limit]))
-    next_link = _NEXT_PAGE.search(page)
+        limit = starts[index + 1].start() if index + 1 < len(starts) else len(text)
+        end = text.find(f'href="#prodejci{match.group(1)}"', match.end(), limit)
+        block = text[match.end() : end if end != -1 else limit]
+        offers.extend(_parse_product(block, page.url))
+    next_link = _NEXT_PAGE.search(text)
     return offers, urljoin(BASE_URL, html.unescape(next_link.group(1))) if next_link else None
 
 
-def _parse_product(block: str) -> list[Offer]:
+def _parse_product(block: str, page_url: str) -> list[Offer]:
     url, name = _ITEM_URL.search(block), _ITEM_NAME.search(block)
     if not (url and name):
         return []
     product = " ".join(html.unescape(name.group(1)).split())
-    product_url = urljoin(BASE_URL, html.unescape(url.group(1)))
+    # Odkaz na produkt jde na web do `href`: jiný než https na akcniceny.cz (třeba
+    # `javascript:`) by byl díra, proto nález dostane odkaz na stranu výpisu.
+    product_url = _source_link(url.group(1)) or page_url
     offers = []
     for part in block.split(_OFFER)[1:]:
         chain, price = _SELLER.search(part), _PRICE.search(part)
@@ -207,6 +212,13 @@ def _offer_key(source_url: str, content: dict[str, Any]) -> tuple:
         content["card_price"],
         content["valid_until"],
     )
+
+
+def _source_link(href: str) -> str | None:
+    """Odkaz ze zdroje jako celá adresa, jen když vede přes https na akcniceny.cz."""
+    url = urljoin(BASE_URL, html.unescape(href))
+    parts = urlsplit(url)
+    return url if parts.scheme == "https" and parts.hostname in SOURCE_HOSTS else None
 
 
 def _money(value: Decimal) -> float:

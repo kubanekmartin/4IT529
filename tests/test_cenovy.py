@@ -10,6 +10,7 @@ from itertools import pairwise
 from pathlib import Path
 
 import httpx2
+import pytest
 
 from lihoviny.agents.cenovy import Cenovy
 from lihoviny.bus import Kind
@@ -209,6 +210,30 @@ def test_sponsored_products_and_products_in_several_listings_are_not_counted_twi
         ("Penny Market", 299.9),
     ]
     assert {f.content["source_category"] for f in jagermeister} == {"likéry"}
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["javascript:alert(1)", "https://zlo.example/akce/x/", "http://www.akcniceny.cz/akce/x/"],
+    ids=["javascript", "cizi-web", "bez-https"],
+)
+def test_product_link_that_is_not_https_akcniceny_is_replaced_by_the_listing_page(
+    bus, board, clock, raw_dir, make_agent, url
+):
+    # Odkaz ze zdroje jde na web jako href: jiný než https://www.akcniceny.cz/… se nepoužije.
+    page = LISTING.format("tuzemak-rum") + "strana-2/"
+    routes = source_routes()
+    routes[page] = (
+        (FIXTURES / "tuzemak-rum-strana-2.html")
+        .read_bytes()
+        .replace(b'content="/akce/bozkov-tradicni-35-0-5l/"', f'content="{url}"'.encode())
+    )
+    cenovy = make_cenovy(make_agent, clock, raw_dir, routes)
+    send_zadani(bus)
+
+    cenovy.process_pending()
+
+    assert {f.source_url for f in akcni_ceny(board, "Božkov Tradiční 35 % 0,5l")} == {page}
 
 
 def test_e_shop_offer_has_no_flyer(bus, board, clock, raw_dir, make_agent):
