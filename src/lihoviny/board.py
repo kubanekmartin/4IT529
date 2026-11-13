@@ -451,6 +451,18 @@ class Board:
                 [conversation_id],
             ).fetchall()
 
+    def unanswered_zadani(self, *, agent: str) -> list[Zadani]:
+        """Zadání agenta, na která ještě neodpověděl a která řídicí agent neuzavřel."""
+        with self._cursor(Zadani) as cur:
+            return cur.execute(
+                f"""
+                SELECT {ZADANI_COLUMNS} FROM zadani
+                WHERE outcome IS NULL AND agent = %s
+                ORDER BY sent_at
+                """,
+                [agent],
+            ).fetchall()
+
     def overdue_zadani(self, now: datetime) -> list[Zadani]:
         """Zadání bez odpovědi, kterým termín `deadline` už vypršel."""
         with self._cursor(Zadani) as cur:

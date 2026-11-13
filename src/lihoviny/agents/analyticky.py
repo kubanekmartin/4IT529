@@ -15,7 +15,8 @@ Smyčka Dotazů: když sběr některé KIQ v posledním běhu selhal nebo vráti
 pošle agent ještě před psaním řídicímu agentovi Dotaz (nejvýš 3, jeden za KIQ, jedno kolo)
 a na Zadání Briefu odpoví až po odpovědích na ně: podklady sestaví znovu, takže Brief
 obsahuje i doplněné nálezy, a mezeru, kterou doplnění nezaplnilo, uvede i s důvodem.
-Na co agent čeká, čte z konverzace na sběrnici, takže to přežije i restart služby.
+Na co agent čeká, čte z konverzace na sběrnici, takže to přežije i restart služby; Brief, na
+jehož Dotazy už všechno přišlo, ale agent ho kvůli pádu nedopsal, dopíše `on_idle`.
 """
 
 import json
@@ -179,15 +180,27 @@ class Analyticky(Agent):
         else:
             super().handle_message(message)
 
+    def on_idle(self) -> None:
+        """Dopíše Brief, na jehož Dotazy už přišly všechny odpovědi, ale agent ho nenapsal:
+        spadl hned po vyzvednutí poslední odpovědi (zpráva je vyzvednutá, `handle_message`
+        ji už nedostane)."""
+        for zadani in self.board.unanswered_zadani(agent=self.name):
+            conversation = self.bus.conversation(zadani.conversation_id)
+            waiting = _waiting_brief(conversation, self.name)
+            if waiting is not None and waiting.dotazy and waiting.all_answered:
+                log.info("%s: dopisuje Brief po restartu (%s)", self.name, zadani.conversation_id)
+                self._finish_brief(waiting)
+
     def _dotaz_answered(self, answer: Message) -> None:
         """Po odpovědi na poslední Dotaz agent Brief dopíše a odpoví na Zadání Briefu."""
         waiting = _waiting_brief(self.bus.conversation(answer.conversation_id), self.name)
         if waiting is None:
             log.info("%s: odpověď %s na Dotaz, Brief už je hotový", self.name, answer.id)
         elif waiting.all_answered:
-            self.answer(
-                waiting.request, lambda: self._brief(waiting.request.content, waiting.answers)
-            )
+            self._finish_brief(waiting)
+
+    def _finish_brief(self, waiting: WaitingBrief) -> None:
+        self.answer(waiting.request, lambda: self._brief(waiting.request.content, waiting.answers))
 
     def _brief(self, content: dict[str, Any], answers: dict[int, Message]) -> dict[str, Any]:
         """Napíše a uloží Brief; `answers` jsou odpovědi na Dotazy podle KIQ."""

@@ -141,6 +141,26 @@ def test_brief_says_so_when_the_doplneni_from_dotaz_fails_too(bus, board, clock,
     ) in gaps
 
 
+def test_brief_comes_out_after_restart_when_analyst_fell_right_after_taking_the_last_answer(
+    bus, board, clock, make_agent
+):
+    ridici = make_agent(Ridici, llm=FakeLlm(ZADANI_Z_DOTAZU))
+    brief = monday_brief(bus, board, clock, ridici, failed={"cenovy": "akcniceny.cz: HTTP 429"})
+    make_agent(Analyticky).process_pending()
+    ridici.process_pending()
+    fail(bus, "cenovy", "akcniceny.cz: HTTP 503")
+    ridici.process_pending()
+    assert bus.claim("analyticky").kind is Kind.FAILURE  # vyzvedl odpověď na Dotaz a spadl
+
+    restarted = make_agent(Analyticky)
+    restarted.process_pending()
+    restarted.on_idle()
+    restarted.on_idle()
+
+    replies = [m for m in bus.conversation(brief.conversation_id) if m.sender == "analyticky"]
+    assert [m.kind for m in replies] == [Kind.QUERY, Kind.INFORM]  # Brief právě jednou
+
+
 def test_silent_zadani_z_dotazu_fails_at_15_minutes_so_the_brief_still_comes_out_in_time(
     bus, board, clock, make_agent, web
 ):
