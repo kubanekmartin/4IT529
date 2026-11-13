@@ -90,6 +90,34 @@ def test_refusal_raises_so_the_agent_reports_failure():
         ClaudeLlm(model="claude-sonnet-5-5", client=client).ask("…", Relevance)
 
 
+def test_one_call_gives_up_within_three_minutes_so_ridici_does_not_record_selhani_meanwhile(
+    monkeypatch,
+):
+    # Řídicí agent čeká na odpověď 30 minut; jedno zaseknuté volání LLM je nesmí vyčerpat.
+    read_timeouts = []
+
+    def hanging_api(request):
+        read_timeouts.append(request.extensions["timeout"]["read"])
+        raise httpx2.ReadTimeout("API neodpovídá", request=request)
+
+    real_client = anthropic.Anthropic
+    monkeypatch.setattr(
+        anthropic,
+        "Anthropic",
+        lambda **kwargs: real_client(
+            **kwargs,
+            api_key="test-bez-hodnoty",
+            http_client=httpx2.Client(transport=httpx2.MockTransport(hanging_api)),
+        ),
+    )
+
+    with pytest.raises(anthropic.APITimeoutError):
+        ClaudeLlm(model="claude-sonnet-5-5").ask("Je to o rumu?", Relevance)
+
+    assert len(read_timeouts) >= 2  # krátký výpadek API se zkusí znovu
+    assert sum(read_timeouts) <= 180
+
+
 def test_fake_llm_returns_prepared_answers_in_order_and_remembers_prompts():
     llm = FakeLlm({"relevantni": True, "shrnuti": "první"}, Relevance(relevantni=False, shrnuti=""))
 

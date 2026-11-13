@@ -13,6 +13,11 @@ import anthropic
 from pydantic import BaseModel
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
+# Jedno volání trvá nejvýš (1 + RETRIES) × TIMEOUT = 3 minuty. Řídicí agent čeká na odpověď
+# Zadání 30 minut; výchozí limity SDK (3 × 10 minut) by ho vyčerpaly jediným zaseknutým voláním
+# a běžící agent by dostal Selhání. Psaní Briefu může dostat delší limit (`timeout=`).
+TIMEOUT = 60.0
+RETRIES = 2
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -37,11 +42,19 @@ def model_for(agent_name: str) -> str:
 
 class ClaudeLlm:
     def __init__(
-        self, *, model: str, client: anthropic.Anthropic | None = None, max_tokens: int = 16000
+        self,
+        *,
+        model: str,
+        client: anthropic.Anthropic | None = None,
+        max_tokens: int = 16000,
+        timeout: float = TIMEOUT,
+        retries: int = RETRIES,
     ):
         self.model = model
         self._client = client
         self._max_tokens = max_tokens
+        self._timeout = timeout
+        self._retries = retries
 
     @classmethod
     def for_agent(cls, agent_name: str, **kwargs) -> "ClaudeLlm":
@@ -72,7 +85,7 @@ class ClaudeLlm:
     def _get_client(self) -> anthropic.Anthropic:
         # Klient až při prvním volání: agenti bez LLM (a testy) se obejdou bez API klíče.
         if self._client is None:
-            self._client = anthropic.Anthropic()
+            self._client = anthropic.Anthropic(timeout=self._timeout, max_retries=self._retries)
         return self._client
 
 
