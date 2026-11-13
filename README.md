@@ -26,6 +26,15 @@ docker compose exec ozvena lihoviny zadani ozvena '{"fail": "ukázka Selhání"}
 
 Příkaz vypíše Zadání i odpověď (INFORM, nebo FAILURE s důvodem) a obě zprávy se objeví v logu.
 
+Sortimentní agent stáhne kategorii Lihoviny z rohlik.cz (asi 13 stránek po 5 s) a nové
+produkty zařadí přes LLM, takže potřebuje `ANTHROPIC_API_KEY` v `.env` a delší čekání:
+
+```sh
+docker compose exec sortimentni lihoviny zadani sortimentni --cekat 600
+```
+
+Produkty a Novinky pak ukáže stránka <http://127.0.0.1:8510/sortiment>.
+
 ## Vývoj a testy
 
 Potřebuješ [uv](https://docs.astral.sh/uv/) a Docker.
