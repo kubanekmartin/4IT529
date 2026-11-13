@@ -5,6 +5,7 @@ zmenšené na pár odstavců: `clanky-den1.json` je výpis jednoho dne, `clanky-
 o pár dní později se dvěma novými články. LLM nahrazují připravené odpovědi.
 """
 
+import hashlib
 from pathlib import Path
 
 import psycopg
@@ -13,7 +14,7 @@ from psycopg import sql
 
 from lihoviny.agents.medialni import Medialni
 from lihoviny.bus import Kind
-from lihoviny.fetch import FakeFetcher, FetchError
+from lihoviny.fetch import FakeFetcher, FetchError, read_raw
 from lihoviny.llm import FakeLlm, LlmError
 from lihoviny.products import plain_text
 
@@ -204,8 +205,16 @@ def test_no_person_names_are_stored(bus, board, clock, raw_dir, make_agent, data
     # Bez diakritiky a malými písmeny, aby test zachytil i jméno ve slugu adresy.
     stored = plain_text(stored_text(database_url))
     assert "stock plzen bozkov" in stored
+    # Na disk jde jen zmenšená odpověď API (ID, čas vydání, odkaz) a otisk původní.
+    saved = [read_raw(path) for path in sorted(raw_dir.rglob("*.gz"))]
+    assert [meta["original_sha256"] for meta, _ in saved] == [
+        hashlib.sha256((FIXTURES / "clanky-se-jmeny.json").read_bytes()).hexdigest()
+    ]
+    on_disk = plain_text(b" ".join(body for _, body in saved).decode())
+    assert "zboziaprodej cz p " in on_disk
     for name in ["vladimir", "formank", "jourdren", "jiri", "storch", "jaroslav", "paim"]:
         assert name not in stored
+        assert name not in on_disk
 
 
 def test_source_failure_is_failure_and_board_stays_empty(bus, board, clock, raw_dir, make_agent):

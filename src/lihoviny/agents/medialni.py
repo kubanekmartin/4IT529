@@ -7,7 +7,8 @@ značky, kanál, téma a shrnutí ve dvou větách. Nález vznikne jen z relevan
 REST API místo RSS: RSS nese jen 10 posledních článků (pár dní), API vrátí libovolný počet
 a v JSON dává ID článku a čas vydání v UTC.
 
-Jména osob se neukládají. Nález odkazuje na článek krátkým odkazem s ID (adresa se slugem
+Jména osob se neukládají. Na disk jde jen ID, čas vydání a odkaz každého článku (s otiskem
+celé odpovědi), ne titulky a texty. Nález odkazuje na článek krátkým odkazem s ID (adresa se slugem
 opakuje titulek, a s ním i jména), titulek a shrnutí píše LLM bez jmen a jména, která LLM
 v článku našel, agent v jeho textech pro jistotu ještě nahradí.
 """
@@ -113,7 +114,7 @@ class Medialni(Agent):
     fetch_delay = 1.0
 
     def handle_request(self, request: Message) -> dict[str, Any]:
-        page = self.fetcher.get(POSTS_URL)
+        page = self.fetcher.get(POSTS_URL, minimize=_without_texts)
         articles = _parse_articles(page)
         seen = self.board.article_ids(source=SOURCE)
         # LLM posoudí nové články dřív, než se cokoli zapíše: jeho chyba nechá tabuli beze změny.
@@ -233,6 +234,20 @@ def _parse_articles(page: FetchResult) -> list[Article]:
     if not articles:
         raise SourceFormatError(f"{SOURCE}: API nevrátilo žádný článek (změnil se web?)")
     return sorted(articles, key=lambda article: article.published_at)
+
+
+def _without_texts(body: bytes) -> bytes:
+    """Podoba odpovědi API pro disk: titulky a texty nesou jména osob, zůstane ID, čas vydání
+    a odkaz na článek. Z odpovědi, která není výpisem článků, se neuloží nic (jen otisk)."""
+    try:
+        posts = json.loads(body)
+        kept = [
+            {"id": post["id"], "date_gmt": post["date_gmt"], "link": f"{BASE_URL}/?p={post['id']}"}
+            for post in posts
+        ]
+    except (KeyError, TypeError, ValueError):
+        return b""
+    return json.dumps(kept).encode()
 
 
 def _plain_text(markup: str) -> str:
