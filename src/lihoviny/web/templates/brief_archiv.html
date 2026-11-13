@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Archiv Briefů{% endblock %}
+
+{% block head %}
+<style>
+  .briefs { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+  .briefs li {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: .75rem 1rem;
+  }
+  .briefs a { font-weight: 600; }
+  .gap-count { color: var(--failure); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Archiv Briefů</h1>
+{% if briefs %}
+<p class="muted">Všechny Briefy od nejnovějšího; každý pokrývá nálezy za sedm dní před svým vznikem.</p>
+<ol class="briefs">
+  {% for brief in briefs %}
+  <li>
+    <a href="/brief/{{ brief.id }}">Brief {{ brief.created_at | datum }}</a>
+    {% if loop.first %}<span class="muted">(aktuální)</span>{% endif %}
+    <div class="muted">
+      Nálezy od {{ brief.period_start | cas }} do {{ brief.created_at | cas }}
+      {%- if brief.failures %}, <span class="gap-count">Selhání sběru: {{ brief.failures | length }}</span>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p>Zatím žádný Brief.</p>
+{% endif %}
+{% endblock %}

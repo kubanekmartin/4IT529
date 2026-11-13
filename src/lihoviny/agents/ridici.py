@@ -34,8 +34,8 @@ class Ridici(Agent):
     # Sběrní agenti, kterým běh sběru pošle Zadání. Nový sběrný agent = jeho jméno sem
     # (a třída v AGENTS). Ozvěna sem nepatří, není sběrná.
     sberni_agenti: ClassVar[tuple[str, ...]] = ("sortimentni", "cenovy")
-    # Analytický agent, kterému běh Briefu pošle Zadání; dokud není, Brief se nezadává.
-    analyst: ClassVar[str | None] = None
+    # Analytický agent, kterému běh Briefu pošle Zadání; bez něj se Brief nezadává.
+    analyst: ClassVar[str | None] = "analyticky"
 
     def handle_request(self, request: Message) -> dict[str, Any]:
         match request.content.get("beh", "collection"):
@@ -44,7 +44,7 @@ class Ridici(Agent):
                 sent_to = list(self.sberni_agenti)
             case "brief":
                 if not self.analyst:
-                    raise BehError("Brief nemá komu zadat: analytický agent zatím neexistuje")
+                    raise BehError("Brief nemá komu zadat: řídicí agent nemá analytického agenta")
                 beh = self._start_brief()
                 sent_to = [self.analyst]
             case unknown:

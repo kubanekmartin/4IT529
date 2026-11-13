@@ -17,7 +17,7 @@ from lihoviny.bus import Bus, Kind, Message
 from lihoviny.clock import Clock
 from lihoviny.db import transaction
 from lihoviny.fetch import Fetcher
-from lihoviny.llm import Llm
+from lihoviny.llm import MAX_TOKENS, TIMEOUT, Llm
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +38,9 @@ class Agent:
     role: ClassVar[str]
     # Pauza mezi požadavky na zdroj v sekundách: alespoň crawl-delay z robots.txt zdroje.
     fetch_delay: ClassVar[float] = 1.0
+    # Limity jednoho volání LLM (sekundy na pokus, tokeny odpovědi); psaní Briefu potřebuje víc.
+    llm_timeout: ClassVar[float] = TIMEOUT
+    llm_max_tokens: ClassVar[int] = MAX_TOKENS
 
     def __init__(self, *, bus: Bus, board: Board, fetcher: Fetcher, llm: Llm, clock: Clock):
         self.bus = bus

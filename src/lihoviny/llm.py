@@ -18,6 +18,7 @@ DEFAULT_MODEL = "claude-sonnet-5-5"
 # a běžící agent by dostal Selhání. Psaní Briefu může dostat delší limit (`timeout=`).
 TIMEOUT = 60.0
 RETRIES = 2
+MAX_TOKENS = 16000
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -46,7 +47,7 @@ class ClaudeLlm:
         *,
         model: str,
         client: anthropic.Anthropic | None = None,
-        max_tokens: int = 16000,
+        max_tokens: int = MAX_TOKENS,
         timeout: float = TIMEOUT,
         retries: int = RETRIES,
     ):

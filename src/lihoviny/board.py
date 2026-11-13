@@ -5,6 +5,7 @@ a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady. Pr
 sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat.
 
 Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání a jak každé dopadlo.
+Analytický agent sem zapisuje Briefy a u každého nálezy, o které se opírá.
 """
 
 import uuid
@@ -106,6 +107,27 @@ class Zadani:
 ZADANI_COLUMNS = (
     "beh_id, agent, conversation_id, sent_at, outcome, new_findings, item_count, reason,"
     " answered_at"
+)
+
+
+@dataclass(frozen=True)
+class Brief:
+    """Brief za období (`period_start`, `created_at`]; obsah částí viz agents/analyticky.py."""
+
+    id: int
+    beh_id: int | None
+    created_at: datetime
+    period_start: datetime
+    what_happened: list[dict[str, Any]]
+    unusual: list[dict[str, Any]]
+    recommendations: list[dict[str, Any]]
+    charts: list[dict[str, Any]]
+    failures: list[dict[str, Any]]
+
+
+BRIEF_COLUMNS = (
+    "id, beh_id, created_at, period_start, what_happened, unusual, recommendations, charts,"
+    " failures"
 )
 
 
@@ -226,6 +248,32 @@ class Board:
                 {"kiq": kiq, "snapshot_id": snapshot_id},
             ).fetchall()
 
+    def findings_seen(self, *, since: datetime, until: datetime) -> list[Finding]:
+        """Nálezy zjištěné v období (since, until] i dřívější, které snímek z období viděl znovu
+        (například akční cena, která platí dál)."""
+        with self._cursor(Finding) as cur:
+            return cur.execute(
+                f"""
+                SELECT {_FINDING_COLUMNS} FROM findings f
+                WHERE (f.found_at > %(since)s AND f.found_at <= %(until)s)
+                   OR EXISTS (
+                       SELECT 1 FROM snapshot_findings sf JOIN snapshots s ON s.id = sf.snapshot_id
+                       WHERE sf.finding_id = f.id
+                         AND s.taken_at > %(since)s AND s.taken_at <= %(until)s
+                   )
+                ORDER BY f.id
+                """,
+                {"since": since, "until": until},
+            ).fetchall()
+
+    def snapshot_finding_ids(self, snapshot_id: int) -> list[int]:
+        with self._cursor() as cur:
+            rows = cur.execute(
+                "SELECT finding_id FROM snapshot_findings WHERE snapshot_id = %s ORDER BY 1",
+                [snapshot_id],
+            ).fetchall()
+        return [finding_id for (finding_id,) in rows]
+
     def record_snapshot_findings(self, snapshot_id: int, finding_ids: Sequence[int]) -> None:
         """Zapíše, které nálezy (i dřívější) snímek u zdroje znovu viděl."""
         with self._cursor() as cur:
@@ -316,6 +364,58 @@ class Board:
                 """,
                 [sent_before],
             ).fetchall()
+
+    def record_brief(
+        self,
+        *,
+        beh_id: int | None,
+        period_start: datetime,
+        what_happened: list[dict[str, Any]],
+        unusual: list[dict[str, Any]],
+        recommendations: list[dict[str, Any]],
+        charts: list[dict[str, Any]],
+        failures: list[dict[str, Any]],
+        finding_ids: Sequence[int],
+    ) -> Brief:
+        """Zapíše Brief (`created_at` = clock.now()) a nálezy, o které se jeho tvrzení opírají."""
+        with self._cursor(Brief) as cur:
+            brief = cur.execute(
+                f"""
+                INSERT INTO briefs
+                    (beh_id, created_at, period_start, what_happened, unusual, recommendations,
+                     charts, failures)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING {BRIEF_COLUMNS}
+                """,
+                [
+                    beh_id,
+                    self._clock.now(),
+                    period_start,
+                    Jsonb(what_happened),
+                    Jsonb(unusual),
+                    Jsonb(recommendations),
+                    Jsonb(charts),
+                    Jsonb(failures),
+                ],
+            ).fetchone()
+            cur.executemany(
+                "INSERT INTO brief_findings (brief_id, finding_id) VALUES (%s, %s)",
+                [(brief.id, finding_id) for finding_id in sorted(set(finding_ids))],
+            )
+        return brief
+
+    def brief(self, brief_id: int) -> Brief | None:
+        with self._cursor(Brief) as cur:
+            return cur.execute(
+                f"SELECT {BRIEF_COLUMNS} FROM briefs WHERE id = %s", [brief_id]
+            ).fetchone()
+
+    def brief_finding_ids(self, brief_id: int) -> list[int]:
+        with self._cursor() as cur:
+            rows = cur.execute(
+                "SELECT finding_id FROM brief_findings WHERE brief_id = %s ORDER BY 1", [brief_id]
+            ).fetchall()
+        return [finding_id for (finding_id,) in rows]
 
     def _cursor(self, row_class: type | None = None) -> AbstractContextManager[psycopg.Cursor]:
         return db.cursor(self.database_url, row_class)

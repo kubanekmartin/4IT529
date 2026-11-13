@@ -1,0 +1,70 @@
+# Zadavatel (GLOSSARY.md): fiktivní středně velký český výrobce lihovin se značkou Valnov.
+# Brief z tohoto souboru bere portfolio zadavatele a sledované konkurenty.
+#
+# NÁVRH K ODSOUHLASENÍ TÝMEM: portfolio navrhl analytický agent (#25). Produkty, značka i ceny
+# jsou vymyšlené; běžné ceny jsou odhad běžných (ne akčních) cen v řetězcích na podzim 2026.
+# Tým portfolio schválí nebo upraví v PR; změna nevyžaduje změnu kódu.
+
+# Sledovaní konkurenti: výrobci, kterým Brief dává přednost před ostatními. Jména přesně
+# tak, jak je sortimentní agent zapisuje k produktům (výrobce).
+watched_competitors = ["Stock", "Rudolf Jelínek", "Fruko-Schulz", "Jan Becher"]
+
+# Portfolio zadavatele (5–8 produktů). `code` je krátký kód, kterým doporučení v Briefu
+# odkazuje na produkt; `category` je kód kategorie z GLOSSARY.md (lihoviny.products);
+# `regular_price` je běžná cena láhve v Kč včetně DPH.
+
+[[portfolio]]
+code = "tuzemak-05"
+name = "Valnovský tuzemák 37,5 % 0,5 l"
+category = "rum_tuzemak"
+volume_ml = 500
+abv = 37.5
+regular_price = 179.90
+
+[[portfolio]]
+code = "vodka-05"
+name = "Valnovská vodka 37,5 % 0,5 l"
+category = "vodka"
+volume_ml = 500
+abv = 37.5
+regular_price = 169.90
+
+[[portfolio]]
+code = "bylinny-05"
+name = "Valnovský bylinný likér 35 % 0,5 l"
+category = "horke_likery"
+volume_ml = 500
+abv = 35
+regular_price = 219.90
+
+[[portfolio]]
+code = "gin-07"
+name = "Valnov Dry Gin 40 % 0,7 l"
+category = "gin"
+volume_ml = 700
+abv = 40
+regular_price = 449.90
+
+[[portfolio]]
+code = "slivovice-07"
+name = "Valnovská slivovice 50 % 0,7 l"
+category = "ovocne_destilaty"
+volume_ml = 700
+abv = 50
+regular_price = 599.90
+
+[[portfolio]]
+code = "palenka-07"
+name = "Valnovská vinná pálenka 36 % 0,7 l"
+category = "brandy"
+volume_ml = 700
+abv = 36
+regular_price = 289.90
+
+[[portfolio]]
+code = "rum-cola-033"
+name = "Valnov Rum & Cola 5 % 0,33 l"
+category = "rtd"
+volume_ml = 330
+abv = 5
+regular_price = 44.90

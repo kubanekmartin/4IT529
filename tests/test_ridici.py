@@ -23,6 +23,7 @@ from lihoviny.web.app import create_app
 
 class RidiciSNahrazkami(Ridici):
     sberni_agenti = ("sberny-a", "sberny-b")
+    analyst = None
 
 
 class RidiciSAnalytikem(RidiciSNahrazkami):
@@ -287,7 +288,7 @@ def test_manual_brief_beh_sends_zadani_to_analyst(bus, make_agent):
         (
             RidiciSNahrazkami,
             {"beh": "brief"},
-            "Brief nemá komu zadat: analytický agent zatím neexistuje",
+            "Brief nemá komu zadat: řídicí agent nemá analytického agenta",
         ),
         (
             RidiciSAnalytikem,
