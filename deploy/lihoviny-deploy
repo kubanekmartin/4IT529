@@ -20,7 +20,8 @@ ENV_FILE=$APP_DIR/.env
 PROJECT=lihoviny
 WEB_URL=http://127.0.0.1:8510/log # stejný port jako proxy_pass v nginx
 KEEP_RELEASES=5
-MAX_ARCHIVE_BYTES=$((100 * 1024 * 1024))
+MAX_ARCHIVE_BYTES=$((100 * 1024 * 1024))   # archiv tar.gz na stdin
+MAX_EXTRACTED_BYTES=$((256 * 1024 * 1024)) # týž archiv rozbalený (dnes kolem 17 MB)
 MAX_CONTENT_BYTES=65536
 NAME_RE='^[a-z][a-z0-9-]{0,39}$'
 
@@ -62,13 +63,46 @@ wait_for_web() {
     return 1
 }
 
+# Spustí služby release a ověří web; když nenaběhnou, vypíše jejich stav a logy a vrátí 1.
 start_release() {
     local release=$1
-    if ! compose "$release" up -d --build --remove-orphans || ! wait_for_web; then
-        compose "$release" ps -a >&2 || true
-        compose "$release" logs --tail 40 >&2 || true
-        die "služby release $(basename "$release") nenaběhly"
+    if compose "$release" up -d --build --remove-orphans && wait_for_web; then
+        return 0
     fi
+    compose "$release" ps -a >&2 || true
+    compose "$release" logs --tail 40 >&2 || true
+    return 1
+}
+
+# Po nepovedeném nasazení znovu spustí release, na který ukazuje `current`. Vrací jen
+# kontejnery: migrace nové verze v databázi zůstanou (schéma se dopředu nevrací).
+roll_back() {
+    if [[ ! -L $APP_DIR/current ]]; then
+        log "předchozí release není, není kam se vrátit"
+        return 0
+    fi
+    use_current
+    log "vracím předchozí release $(basename "$CURRENT")"
+    if start_release "$CURRENT"; then
+        log "předchozí release $(basename "$CURRENT") zase běží"
+    else
+        log "ani předchozí release nenaběhl"
+    fi
+}
+
+# Rozbalí tar.gz ze stdin do adresáře $1. Hlídá i velikost po rozbalení: archiv do 100 MB se
+# může rozbalit na desítky GB (gzip bomba) a disk VM sdílí i ostatní weby.
+unpack() {
+    local dir=$1 tarball=$1.tar status=0 size
+    head -c "$MAX_ARCHIVE_BYTES" | gzip -dc | head -c "$((MAX_EXTRACTED_BYTES + 1))" >"$tarball" ||
+        status=$?
+    size=$(wc -c <"$tarball")
+    ((size <= MAX_EXTRACTED_BYTES)) || die "rozbalený archiv má víc než $MAX_EXTRACTED_BYTES B"
+    ((status == 0)) ||
+        die "archiv release se nepodařilo rozbalit (poškozený, nebo víc než $MAX_ARCHIVE_BYTES B)"
+    tar -x --no-same-owner --no-same-permissions -f "$tarball" -C "$dir" ||
+        die "archiv release se nepodařilo rozbalit"
+    rm -f "$tarball"
 }
 
 prune_releases() {
@@ -89,16 +123,18 @@ cmd_deploy() {
     lock
     local release=$RELEASES/$sha incoming
     incoming=$(mktemp -d "$RELEASES/.incoming-XXXXXX")
-    trap 'rm -rf "$incoming"' EXIT
-    head -c "$MAX_ARCHIVE_BYTES" | tar -xz --no-same-owner --no-same-permissions -C "$incoming" ||
-        die "archiv release se nepodařilo rozbalit (víc než $MAX_ARCHIVE_BYTES B?)"
+    trap 'rm -rf "$incoming" "$incoming.tar"' EXIT
+    unpack "$incoming"
     [[ -f $incoming/compose.yaml ]] || die "v archivu chybí compose.yaml"
     rm -rf "$release"
     mv "$incoming" "$release"
     trap - EXIT
     touch "$release"
     log "release $sha rozbalen, sestavuji image a spouštím služby"
-    start_release "$release"
+    if ! start_release "$release"; then
+        roll_back
+        die "služby release $sha nenaběhly"
+    fi
     ln -sfn "releases/$sha" "$APP_DIR/current.new"
     mv -T "$APP_DIR/current.new" "$APP_DIR/current"
     prune_releases
@@ -108,7 +144,7 @@ cmd_deploy() {
 cmd_up() {
     lock
     use_current
-    start_release "$CURRENT"
+    start_release "$CURRENT" || die "služby release $(basename "$CURRENT") nenaběhly"
 }
 
 cmd_zadani() {
