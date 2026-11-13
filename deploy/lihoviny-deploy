@@ -53,7 +53,7 @@ lock() {
 wait_for_web() {
     local i
     for i in $(seq 1 60); do
-        if curl -fsS -o /dev/null --max-time 5 "$WEB_URL"; then
+        if curl -fs -o /dev/null --max-time 5 "$WEB_URL"; then
             log "web odpovídá ($WEB_URL)"
             return 0
         fi
@@ -136,6 +136,9 @@ cmd_status() {
     use_current
     compose "$CURRENT" ps -a
 }
+
+# Při `sudo -u` zůstává pracovní adresář volajícího, kam tento uživatel nemusí smět (compose ho čte).
+cd "$APP_DIR"
 
 if [[ -n ${SSH_ORIGINAL_COMMAND+x} ]]; then
     read -r -a args <<<"$SSH_ORIGINAL_COMMAND"
