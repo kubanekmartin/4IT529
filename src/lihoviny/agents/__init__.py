@@ -7,6 +7,7 @@ Sběrný agent navíc patří do `Ridici.sberni_agenti` (agents/ridici.py), jina
 from lihoviny.agent import Agent
 from lihoviny.agents.cenovy import Cenovy
 from lihoviny.agents.ozvena import Ozvena
+from lihoviny.agents.regulatorni import Regulatorni
 from lihoviny.agents.ridici import Ridici
 from lihoviny.agents.sortimentni import Sortimentni
 
@@ -17,5 +18,6 @@ AGENTS: dict[str, type[Agent]] = {
         Ridici,
         Sortimentni,
         Cenovy,
+        Regulatorni,
     ]
 }

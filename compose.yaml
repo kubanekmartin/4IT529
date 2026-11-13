@@ -100,6 +100,17 @@ services:
     volumes:
       - rawdata:/data/raw
 
+  # KIQ 4: sněmovní tisky o alkoholu z otevřených dat Sněmovny (psp.cz), posoudí LLM.
+  # Ruční běh: docker compose exec regulatorni lihoviny zadani regulatorni --cekat 300
+  regulatorni:
+    <<: *app
+    command: ["lihoviny", "agent", "regulatorni"]
+    environment:
+      <<: *agent-env
+      LLM_MODEL_REGULATORNI: ${LLM_MODEL_REGULATORNI:-}
+    volumes:
+      - rawdata:/data/raw
+
 volumes:
   pgdata:
   rawdata:

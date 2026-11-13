@@ -2,7 +2,8 @@
 
 Sběrný agent po stažení zdroje zapíše jeden snímek (odkazuje na surová data na disku)
 a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady. Produkty zapisuje
-sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat.
+sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat. Regulatorní
+agent si sem zapisuje ID sněmovních tisků, které už viděl.
 
 Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání a jak každé dopadlo.
 """
@@ -232,6 +233,19 @@ class Board:
             cur.executemany(
                 "INSERT INTO snapshot_findings (snapshot_id, finding_id) VALUES (%s, %s)",
                 [(snapshot_id, finding_id) for finding_id in finding_ids],
+            )
+
+    def known_tisky(self) -> set[int]:
+        """ID sněmovních tisků (z otevřených dat), které regulatorní agent už viděl."""
+        with self._cursor() as cur:
+            return {row[0] for row in cur.execute("SELECT source_id FROM snemovni_tisky")}
+
+    def record_tisky(self, snapshot_id: int, source_ids: Sequence[int]) -> None:
+        """Zapíše sněmovní tisky, které snímek viděl poprvé."""
+        with self._cursor() as cur:
+            cur.executemany(
+                "INSERT INTO snemovni_tisky (source_id, first_seen_snapshot_id) VALUES (%s, %s)",
+                [(source_id, snapshot_id) for source_id in source_ids],
             )
 
     def start_beh(self, kind: DruhBehu, *, scheduled_for: datetime | None = None) -> Beh | None:

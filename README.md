@@ -12,6 +12,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | --- | --- |
 | `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
 | `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
+| `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
 
@@ -84,6 +85,29 @@ a konec platnosti); každý snímek si pamatuje, které akční ceny obsahoval. 
 <http://127.0.0.1:8510/akcni-ceny> ukazuje akční ceny platné k poslednímu snímku: s datem
 konce do jeho data, bez data konce, dokud je poslední snímek obsahuje. Odkaz na produkt se
 bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
+
+### Regulatorní agent (KIQ 4, otevřená data Sněmovny)
+
+Stáhne dva archivy [otevřených dat Poslanecké sněmovny](https://www.psp.cz/sqw/hp.sqw?k=1300):
+sněmovní tisky (`tisky.zip`, asi 4 MB) a poslance s orgány (`poslanci.zip`, kvůli poslaneckým
+klubům). Zdroj je obnovuje jednou denně v noci a vždy s úplným stavem, takže agent stáhne
+každý jednou za Zadání. Bere tisky probíhajícího volebního období kromě písemných interpelací.
+Nové tisky (které agent v dřívějším snímku neviděl) projdou filtrem klíčových slov v názvu
+(líh, alkohol, spotřební daň, reklama, prodej, značení, obaly, návykové látky, DPH…) a jen ty
+posoudí LLM: relevance pro výrobce lihovin, dopad a odhad termínu účinnosti. Potřebuje
+`ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec regulatorni lihoviny zadani regulatorni --cekat 300
+```
+
+Výchozí (první) snímek bere jako nové všechny tisky období, takže stránka
+<http://127.0.0.1:8510/regulace> hned ukáže projednávané tisky, které se lihovin týkají
+(označené „výchozí snímek“). Jména osob systém neukládá: navrhovatel je „vláda (min. financí)“,
+„skupina poslanců (ODS)“ (klub v den předložení) nebo „Senát“, jména z úplného názvu agent
+vypustí a tabulku osob nečte. Na disk místo archivů jde jen to, co agent z archivů přečetl
+(tisky bez jmen, kluby, ID osob), a otisk SHA-256 původního archivu. Podmínky otevřených dat
+chtějí uvést zdroj a datum zpracování; stránka je uvádí pod seznamem.
 
 ## Řídicí agent a běhy
 
@@ -168,11 +192,11 @@ docker buildx build --platform linux/arm64 .
 | `src/lihoviny/bus.py` | sběrnice zpráv (REQUEST = Zadání, INFORM, QUERY = Dotaz, FAILURE = Selhání) |
 | `src/lihoviny/agent.py` | společný základ agenta, obsah odpovědi sběrného agenta |
 | `src/lihoviny/agents/` | jednotliví agenti a jejich registr |
-| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty a běhy řídicího agenta se Zadáními |
+| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty, viděné sněmovní tisky a běhy řídicího agenta se Zadáními |
 | `src/lihoviny/db.py` | připojení k Postgresu a transakce přes sběrnici i tabuli |
 | `src/lihoviny/products.py` | kategorie, normalizovaný klíč produktu, objem a obsah alkoholu z názvu |
 | `src/lihoviny/clock.py` | hodiny (skutečné a pro testy), pražský čas |
-| `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka |
+| `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka (na disk ukládá surová data, případně zmenšená bez jmen) |
 | `src/lihoviny/llm.py` | adaptér LLM (Claude API) a jeho náhražka |
 | `src/lihoviny/migrations/` | číslované migrace `NNNN_popis.sql` |
 | `src/lihoviny/web/` | web (FastAPI, šablony Jinja2) |
