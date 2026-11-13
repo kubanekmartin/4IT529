@@ -10,7 +10,8 @@ akčních cen: všechny akční ceny se stejným názvem patří k témuž produ
    s jediným produktem. Dárkové balení stejného objemu má týž klíč, takže je týž produkt.
 2. Zbytek posoudí LLM, ale jen u akčních cen, které mají kandidáty: produkty stejné značky
    (některé její slovo je v názvu akční ceny), se stejným objemem a obsahem alkoholu, pokud
-   je název uvádí. Dvojici, kterou LLM jednou odmítl, už znovu neposuzuje.
+   je název uvádí. Dvojici, kterou LLM jednou odmítl (null, vynechání nebo ID mimo kandidáty),
+   už znovu neposuzuje. Na jedno Zadání nejvýš `MAX_LLM_BATCHES` volání, zbytek příště.
 
 LLM je jen záloha: když selže, akční ceny zůstanou nespárované a zkusí se při dalším Zadání.
 """
@@ -31,9 +32,12 @@ from lihoviny.products import name_key, parse_abv, parse_volume_ml, plain_text, 
 log = logging.getLogger(__name__)
 
 PairedBy = Literal["key", "llm"]
-# Akčních cen v jednom dotazu na LLM, aby odpověď stihla časový limit jednoho volání
+# Akčních cen v jednom volání LLM, aby odpověď stihla časový limit jednoho volání
 # (`lihoviny.llm.TIMEOUT`) i při prvním párování stovek akčních cen.
 LLM_BATCH = 25
+# Nejvýš tolik volání LLM na jedno Zadání: každé trvá až 3 minuty a cenový agent musí odpovědět
+# do 30 minut. Zbylé akční ceny se spárují při dalších Zadáních.
+MAX_LLM_BATCHES = 4
 
 
 @dataclass(frozen=True)
@@ -79,7 +83,13 @@ def pair(
         if any((name, product.id) not in rejected for product in candidates):
             questions.append((name, candidates))
     newly_rejected: set[tuple[str, int]] = set()
-    for batch in batched(questions, LLM_BATCH, strict=False):
+    batches = list(batched(questions, LLM_BATCH, strict=False))
+    if len(batches) > MAX_LLM_BATCHES:
+        log.info(
+            "párování přes LLM: %s názvů počká na další Zadání",
+            sum(len(batch) for batch in batches[MAX_LLM_BATCHES:]),
+        )
+    for batch in batches[:MAX_LLM_BATCHES]:
         prompt = _prompt(batch)
         try:
             answer = llm.ask(prompt, OfferMatches, effort="low", system=_SYSTEM)
@@ -90,14 +100,14 @@ def pair(
             break
         chosen = {match.offer: match.product for match in answer.offers}
         for offer_id, (name, candidates) in enumerate(batch, start=1):
-            if str(offer_id) not in chosen:
-                continue  # LLM akční cenu vynechal: zkusí se příště
             by_id = {str(product.id): product for product in candidates}
-            product_id = chosen[str(offer_id)]
-            if product_id is None:
-                newly_rejected |= {(name, product.id) for product in candidates}
-            elif product_id in by_id:
+            product_id = chosen.get(str(offer_id))
+            if product_id in by_id:
                 pairings[name] = Pairing(by_id[product_id], "llm")
+            else:
+                # Null, vynechaná akční cena i ID mimo kandidáty: s těmito kandidáty se na ni
+                # LLM už neptá (jinak by se ptal každý den znovu), s novým kandidátem ano.
+                newly_rejected |= {(name, product.id) for product in candidates}
     return PairingResult(pairings, newly_rejected)
 
 

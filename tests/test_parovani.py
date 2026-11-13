@@ -10,6 +10,7 @@ from decimal import Decimal
 import pytest
 from test_cenovy import FIXTURES, LISTING, akcni_ceny, make_cenovy, send_zadani, source_routes
 
+from lihoviny import pairing
 from lihoviny.agents.cenovy import Cenovy
 from lihoviny.bus import Kind
 from lihoviny.fetch import FakeFetcher
@@ -326,3 +327,47 @@ def test_llm_failure_leaves_akcni_ceny_unpaired_and_next_zadani_tries_again(
     assert len(llm.questions) == 1
     (cointreau,) = akcni_ceny(board, "Cointreau Likér 0,7l")
     assert cointreau.product_id == products["cointreau"].id
+
+
+class SloppyModel:
+    """Náhražka LLM, která Cointreau vynechá a u Fernetu vrátí ID, které mezi kandidáty není."""
+
+    def ask(self, prompt, schema, *, effort, system=""):
+        offers = [json.loads(line) for line in prompt.splitlines() if line.startswith("{")]
+        fernet = next(o for o in offers if o["nazev"].startswith("Fernet"))
+        return schema.model_validate({"offers": [{"offer": fernet["id"], "product": "999999"}]})
+
+
+def test_akcni_cena_the_llm_skips_or_answers_with_unknown_product_is_not_asked_again(
+    bus, board, clock, raw_dir, make_agent
+):
+    record_fernet_and_cointreau(board)
+    collect(bus, cenovy_with(make_agent, clock, raw_dir, llm=SloppyModel()))
+
+    clock.advance(days=1)
+    second = PairingModel({})
+    reply = collect(bus, cenovy_with(make_agent, clock, raw_dir, llm=second))
+
+    assert reply.kind is Kind.INFORM
+    assert second.questions == []  # obě akční ceny už LLM se stejnými kandidáty dostal
+    assert {f.product_id for f in board.findings(kiq=2)} == {None}
+
+
+def test_llm_pairs_at_most_a_few_batches_per_zadani_and_the_rest_waits_for_the_next(
+    bus, board, clock, raw_dir, make_agent, monkeypatch
+):
+    # Párování nesmí cenovému agentovi sníst 30 minut na Zadání; zbytek počká na příští den.
+    monkeypatch.setattr(pairing, "LLM_BATCH", 1)
+    monkeypatch.setattr(pairing, "MAX_LLM_BATCHES", 1)
+    products = record_fernet_and_cointreau(board)
+    fernet = "Fernet Stock 0,5l, vybrané druhy"
+    answers = {"Cointreau Likér 0,7l": products["cointreau"], fernet: None}
+    first = PairingModel(answers)
+    collect(bus, cenovy_with(make_agent, clock, raw_dir, llm=first))
+
+    clock.advance(days=1)
+    second = PairingModel(answers)
+    collect(bus, cenovy_with(make_agent, clock, raw_dir, llm=second))
+
+    assert first.questions == [{"Cointreau Likér 0,7l": ["Cointreau 40% obj."]}]
+    assert [list(question) for question in second.questions] == [[fernet]]
