@@ -45,6 +45,26 @@ Z GitHub Actions jde totéž přes workflow pro ruční Zadání (ticket Nasazen
 obsah `{}` nebo `{"run": "brief"}`. Odpověď řídicího agenta jen potvrdí zahájení běhu
 (číslo běhu a komu šlo Zadání); výsledky sběrných agentů jsou v logu a na stránce Běhy.
 
+## Nasazení
+
+Web běží na <https://lihoviny.kubanekmartin.cz/log> (Oracle VM, hostitelský nginx s Let's Encrypt
+a `X-Robots-Tag: noindex`; kontejnery jen na `127.0.0.1`).
+
+- Po zeleném CI na `main` workflow **Nasazení** (`.github/workflows/deploy.yml`) pošle
+  `git archive` commitu přes SSH na server. Skript `deploy/lihoviny-deploy` ho rozbalí do
+  `/srv/lihoviny/releases/<sha>`, spustí `docker compose up --build` a ověří web. Server
+  nepotřebuje přístup na GitHub.
+- Klíč v secrets `DEPLOY_SSH_KEY` patří uživateli `lihoviny-deploy` a smí spustit jen tento skript
+  (forced command, bez shellu a přesměrování portů). Uživatel `deploy` na serveru už patří
+  osobnímu webu, proto vlastní uživatel.
+- Ruční Zadání: workflow **Ruční Zadání** (příjemce, obsah jako JSON, kolik sekund čekat).
+  Odpověď je ve výstupu workflow i v logu komunikace.
+- Tajemství jsou jen v `/srv/lihoviny/.env` (práva 600). API klíč vloží Martin sám, klíč se
+  čte skrytě z terminálu: `ssh -t ubuntu@130.61.26.171 sudo lihoviny-set-api-key`.
+  Ověření jedním voláním LLM: `ssh ubuntu@130.61.26.171 sudo -u lihoviny-deploy lihoviny-deploy overit-llm`.
+- Příprava serveru je v `deploy/setup-server.sh` (`web`, `app`; dá se spustit znovu). Změna
+  `deploy/lihoviny-deploy` se na server dostane jen novým spuštěním `setup-server.sh app`.
+
 ## Vývoj a testy
 
 Potřebuješ [uv](https://docs.astral.sh/uv/) a Docker.
@@ -77,4 +97,5 @@ stránek z `tests/fixtures/`, LLM nahrazuje `FakeLlm` s připravenými odpověď
 | `src/lihoviny/llm.py` | adaptér LLM (Claude API) a jeho náhražka |
 | `src/lihoviny/migrations/` | číslované migrace `NNNN_popis.sql` |
 | `src/lihoviny/web/` | web (FastAPI, šablony Jinja2) |
-| `src/lihoviny/cli.py` | příkaz `lihoviny` (migrate, agent, web, zadani) |
+| `src/lihoviny/cli.py` | příkaz `lihoviny` (migrate, agent, web, zadani, overit-llm) |
+| `deploy/` | nasazení: skript pro SSH, nginx, příprava serveru |

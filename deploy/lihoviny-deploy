@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# Nasazovací skript lihoviny.kubanekmartin.cz: jediné, co smí spustit SSH klíč z GitHub Actions
+# (forced command v authorized_keys). Na server ho instaluje deploy/setup-server.sh do
+# /usr/local/bin/; změna tohoto souboru se na server dostane jen novým spuštěním setup-server.sh.
+#
+#   deploy <sha>                 stdin: tar.gz commitu (git archive); rozbalí release, sestaví
+#                                image, spustí služby a ověří web
+#   zadani <příjemce> [čekat]    stdin: obsah Zadání (objekt JSON); vypíše Zadání a odpověď
+#   overit-llm [agent]           jedno skutečné volání LLM s modelem a prostředím agenta
+#   up                           znovu spustí aktuální release (např. po změně .env)
+#   status                       stav služeb
+#
+# Příkaz přichází v SSH_ORIGINAL_COMMAND (z klíče), při ručním spuštění jako argumenty.
+set -euo pipefail
+umask 027
+
+APP_DIR=/srv/lihoviny
+RELEASES=$APP_DIR/releases
+ENV_FILE=$APP_DIR/.env
+PROJECT=lihoviny
+WEB_URL=http://127.0.0.1:8510/log # stejný port jako proxy_pass v nginx
+KEEP_RELEASES=5
+MAX_ARCHIVE_BYTES=$((100 * 1024 * 1024))
+MAX_CONTENT_BYTES=65536
+NAME_RE='^[a-z][a-z0-9-]{0,39}$'
+
+log() { printf '[lihoviny-deploy] %s\n' "$*" >&2; }
+die() {
+    log "chyba: $*"
+    exit 1
+}
+
+compose() {
+    local release=$1
+    shift
+    IMAGE_TAG=$(basename "$release") docker compose \
+        --project-name "$PROJECT" --project-directory "$release" \
+        --env-file "$ENV_FILE" -f "$release/compose.yaml" "$@"
+}
+
+# Nastaví CURRENT na adresář aktuálního release. Volá se přímo, ne v $(...), aby `die` skončil
+# celý skript, a ne jen podshell.
+use_current() {
+    [[ -L $APP_DIR/current ]] || die "zatím není nasazený žádný release"
+    CURRENT=$(readlink -f "$APP_DIR/current")
+}
+
+lock() {
+    exec 9>"$APP_DIR/.lock"
+    flock -w 900 9 || die "jiné nasazení běží příliš dlouho"
+}
+
+wait_for_web() {
+    local i
+    for i in $(seq 1 60); do
+        if curl -fs -o /dev/null --max-time 5 "$WEB_URL"; then
+            log "web odpovídá ($WEB_URL)"
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+start_release() {
+    local release=$1
+    if ! compose "$release" up -d --build --remove-orphans || ! wait_for_web; then
+        compose "$release" ps -a >&2 || true
+        compose "$release" logs --tail 40 >&2 || true
+        die "služby release $(basename "$release") nenaběhly"
+    fi
+}
+
+prune_releases() {
+    local old
+    use_current
+    # Nejnovější releasy zůstávají (pro ruční návrat), starší i s image se smažou.
+    while IFS= read -r old; do
+        [[ $old == "$(basename "$CURRENT")" ]] && continue
+        rm -rf "${RELEASES:?}/$old"
+        docker image rm "$PROJECT:$old" >/dev/null 2>&1 || true
+        log "smazán starý release $old"
+    done < <(ls -1t "$RELEASES" | tail -n +$((KEEP_RELEASES + 1)))
+}
+
+cmd_deploy() {
+    local sha=${1:-}
+    [[ $sha =~ ^[0-9a-f]{40}$ ]] || die "deploy čeká celé SHA commitu (40 znaků 0-9a-f)"
+    lock
+    local release=$RELEASES/$sha incoming
+    incoming=$(mktemp -d "$RELEASES/.incoming-XXXXXX")
+    trap 'rm -rf "$incoming"' EXIT
+    head -c "$MAX_ARCHIVE_BYTES" | tar -xz --no-same-owner --no-same-permissions -C "$incoming" ||
+        die "archiv release se nepodařilo rozbalit (víc než $MAX_ARCHIVE_BYTES B?)"
+    [[ -f $incoming/compose.yaml ]] || die "v archivu chybí compose.yaml"
+    rm -rf "$release"
+    mv "$incoming" "$release"
+    trap - EXIT
+    touch "$release"
+    log "release $sha rozbalen, sestavuji image a spouštím služby"
+    start_release "$release"
+    ln -sfn "releases/$sha" "$APP_DIR/current.new"
+    mv -T "$APP_DIR/current.new" "$APP_DIR/current"
+    prune_releases
+    log "nasazeno $sha"
+}
+
+cmd_up() {
+    lock
+    use_current
+    start_release "$CURRENT"
+}
+
+cmd_zadani() {
+    local recipient=${1:-} wait=${2:-30} content
+    [[ $recipient =~ $NAME_RE ]] || die "neplatné jméno příjemce: '$recipient'"
+    [[ $wait =~ ^[0-9]{1,4}$ ]] && ((wait <= 3600)) || die "čekat = celé číslo sekund 0-3600"
+    content=$(head -c "$MAX_CONTENT_BYTES")
+    [[ -n $content ]] || content='{}'
+    use_current
+    # Zadání posílá člen týmu přes sběrnici; stačí k tomu kontejner s přístupem k databázi.
+    compose "$CURRENT" exec -T ozvena \
+        lihoviny zadani --cekat "$wait" -- "$recipient" "$content"
+}
+
+cmd_overit_llm() {
+    local agent=${1:-ozvena}
+    [[ $agent =~ $NAME_RE ]] || die "neplatné jméno agenta: '$agent'"
+    use_current
+    # Jednorázový kontejner služby agenta: stejné proměnné (klíč, LLM_MODEL_<AGENT>) jako agent.
+    compose "$CURRENT" run --rm --no-deps -T "$agent" \
+        lihoviny overit-llm --agent "$agent"
+}
+
+cmd_status() {
+    use_current
+    compose "$CURRENT" ps -a
+}
+
+# Při `sudo -u` zůstává pracovní adresář volajícího, kam tento uživatel nemusí smět (compose ho čte).
+cd "$APP_DIR"
+
+if [[ -n ${SSH_ORIGINAL_COMMAND+x} ]]; then
+    read -r -a args <<<"$SSH_ORIGINAL_COMMAND"
+else
+    args=("$@")
+fi
+command=${args[0]:-}
+printf '%s %s %s\n' "$(date -Is)" "$(id -un)" "${args[*]:0:3}" >>"$APP_DIR/deploy.log" || true
+
+case "$command" in
+    deploy) cmd_deploy "${args[@]:1:1}" ;;
+    up) cmd_up ;;
+    zadani) cmd_zadani "${args[@]:1:2}" ;;
+    overit-llm) cmd_overit_llm "${args[@]:1:1}" ;;
+    status) cmd_status ;;
+    *)
+        log "použití: deploy <sha> | up | zadani <příjemce> [čekat] | overit-llm [agent] | status"
+        exit 2
+        ;;
+esac
