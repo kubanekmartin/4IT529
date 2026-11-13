@@ -109,7 +109,7 @@ def test_first_snapshot_reports_only_novinky_labelled_by_seller(
 
     assert reply.kind is Kind.INFORM
     snapshot = board.snapshot(reply.content["snapshot_id"])
-    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 2}
+    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 2, "item_count": 11}
     assert (snapshot.agent, snapshot.source, snapshot.taken_at) == (
         "sortimentni",
         "rohlik.cz",

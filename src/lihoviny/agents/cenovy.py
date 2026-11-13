@@ -104,7 +104,9 @@ class Cenovy(Agent):
                     content=content,
                 )
                 new_findings += 1
-        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=new_findings)
+        return OdpovedSberu(
+            snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(offers)
+        )
 
     def _read_listing(self, url: str, pages: list[FetchResult]) -> list[Offer]:
         offers: list[Offer] = []

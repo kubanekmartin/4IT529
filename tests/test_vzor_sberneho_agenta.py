@@ -35,7 +35,7 @@ class UkazkovySberny(Agent):
                 source_url=page.url,
                 content={"produkt": product, "cena": int(price)},
             )
-        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=len(items))
+        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=len(items), item_count=len(items))
 
 
 def send_zadani(bus):
@@ -56,7 +56,7 @@ def test_sberny_agent_answers_with_summary_and_puts_findings_on_board(
     reply = bus.conversation(zadani.conversation_id)[-1]
     assert reply.kind is Kind.INFORM
     snapshot = board.snapshot(reply.content["snapshot_id"])
-    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 2}
+    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 2, "item_count": 2}
     assert (snapshot.agent, snapshot.source, snapshot.item_count) == (
         "ukazkovy",
         "zdroj.example",

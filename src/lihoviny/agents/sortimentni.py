@@ -186,7 +186,9 @@ class Sortimentni(Agent):
             len(unrecorded),
             new_findings,
         )
-        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=new_findings)
+        return OdpovedSberu(
+            snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(in_snapshot)
+        )
 
     def _describe(
         self, unrecorded: list[UnrecordedProduct], source_brands: set[str], known

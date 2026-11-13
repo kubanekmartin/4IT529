@@ -43,7 +43,9 @@ analytickému agentovi, jakmile bude zapsaný v `Ridici.analyst`. Za agenta, kte
 neodpoví, zapíše Selhání. Když v 6:00 neběžel, zmeškaný běh dožene ještě týž den.
 
 Stránka <http://127.0.0.1:8510/behy> ukazuje poslední běhy a varování, když agent v posledním
-běhu selhal nebo vrátil 0 nálezů. Ruční běh:
+běhu selhal nebo vrátil prázdný snímek (0 položek). Počet nových nálezů je jen informace:
+den bez Novinky nebo nové akční ceny je běžný, rozbitý zdroj poznáš podle prázdného snímku
+nebo Selhání. Ruční běh:
 
 ```sh
 docker compose exec ridici lihoviny zadani ridici                      # denní sběr

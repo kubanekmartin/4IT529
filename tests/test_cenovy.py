@@ -69,7 +69,7 @@ def test_zadani_puts_akcni_ceny_with_chain_validity_and_litre_prices_on_board(
     reply = bus.conversation(zadani.conversation_id)[-1]
     assert reply.kind is Kind.INFORM
     snapshot = board.snapshot(reply.content["snapshot_id"])
-    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 24}
+    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 24, "item_count": 24}
     assert (snapshot.agent, snapshot.source, snapshot.item_count) == (
         "cenovy",
         "akcniceny.cz",
@@ -284,7 +284,11 @@ def test_next_day_snapshot_keeps_the_previous_one_and_adds_only_changed_akcni_ce
 
     reply = bus.conversation(second.conversation_id)[-1]
     second_snapshot = board.snapshot(reply.content["snapshot_id"])
-    assert reply.content == {"snapshot_id": second_snapshot.id, "new_findings": 1}
+    assert reply.content == {
+        "snapshot_id": second_snapshot.id,
+        "new_findings": 1,
+        "item_count": 24,
+    }
     assert board.snapshot(first_snapshot.id) == first_snapshot
     assert second_snapshot.taken_at - first_snapshot.taken_at == timedelta(days=1)
     assert second_snapshot.item_count == first_snapshot.item_count == 24

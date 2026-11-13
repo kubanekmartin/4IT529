@@ -80,6 +80,8 @@ class Ridici(Agent):
             result = {"outcome": zadani.outcome}
             if zadani.new_findings is not None:
                 result["new_findings"] = zadani.new_findings
+            if zadani.item_count is not None:
+                result["item_count"] = zadani.item_count
             if zadani.reason is not None:
                 result["reason"] = zadani.reason
             results[zadani.agent] = result
@@ -101,12 +103,12 @@ class Ridici(Agent):
             super().handle_message(message)
             return
         # Odpověď je vstup od jiného agenta: co neodpovídá kontraktu, se nezapíše.
-        new_findings = message.content.get("new_findings")
         reason = message.content.get("reason")
         zadani = self.board.record_outcome(
             message.conversation_id,
             message.kind,
-            new_findings=new_findings if type(new_findings) is int else None,
+            new_findings=_count(message.content.get("new_findings")),
+            item_count=_count(message.content.get("item_count")),
             reason=None if reason is None else str(reason),
         )
         if zadani is None:
@@ -142,3 +144,11 @@ class Ridici(Agent):
                     content={"reason": reason},
                     conversation_id=zadani.conversation_id,
                 )
+
+
+def _count(value: Any) -> int | None:
+    """Počet z odpovědi jiného agenta, jen když je to opravdu celé číslo.
+
+    `type(...) is int` schválně: `True` je v Pythonu také int, ale počet to není.
+    """
+    return value if type(value) is int else None

@@ -1,4 +1,5 @@
-"""Stránka Běhy: poslední běhy řídicího agenta a varování, když agent selhal nebo nic nenašel."""
+"""Stránka Běhy: poslední běhy řídicího agenta a varování, když agent selhal nebo vrátil
+prázdný snímek. Počet nových nálezů je jen informace: den bez Novinky je běžný."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -9,15 +10,12 @@ from fastapi import APIRouter, Depends, Request
 from psycopg.rows import class_row
 
 from lihoviny.agents.ridici import ANSWER_LIMIT
-from lihoviny.board import Beh, Zadani
+from lihoviny.board import BEH_COLUMNS, ZADANI_COLUMNS, Beh, Zadani
 from lihoviny.web.common import db, prague_time, templates
 
 router = APIRouter()
 
 KIND_LABELS = {"collection": "Sběr", "brief": "Brief"}
-_ZADANI_COLUMNS = (
-    "beh_id, agent, conversation_id, sent_at, outcome, new_findings, reason, answered_at"
-)
 
 
 @dataclass(frozen=True)
@@ -44,17 +42,17 @@ class BehView:
 def behy_page(request: Request, conn: Annotated[psycopg.Connection, Depends(db)]):
     with conn.cursor(row_factory=class_row(Beh)) as cursor:
         behy = cursor.execute(
-            "SELECT id, kind, scheduled_for, started_at FROM behy ORDER BY id DESC LIMIT 20"
+            f"SELECT {BEH_COLUMNS} FROM behy ORDER BY id DESC LIMIT 20"
         ).fetchall()
     with conn.cursor(row_factory=class_row(Zadani)) as cursor:
         zadani = cursor.execute(
-            f"SELECT {_ZADANI_COLUMNS} FROM zadani WHERE beh_id = ANY(%s) ORDER BY agent",
+            f"SELECT {ZADANI_COLUMNS} FROM zadani WHERE beh_id = ANY(%s) ORDER BY agent",
             [[beh.id for beh in behy]],
         ).fetchall()
         # Poslední běh každého agenta, ve kterém už je znám výsledek.
         latest = cursor.execute(
             f"""
-            SELECT DISTINCT ON (agent) {_ZADANI_COLUMNS} FROM zadani
+            SELECT DISTINCT ON (agent) {ZADANI_COLUMNS} FROM zadani
             WHERE outcome IS NOT NULL
             ORDER BY agent, beh_id DESC
             """
@@ -63,7 +61,7 @@ def behy_page(request: Request, conn: Annotated[psycopg.Connection, Depends(db)]
         BehView(beh, [_zadani_view(item) for item in zadani if item.beh_id == beh.id])
         for beh in behy
     ]
-    warnings = [item for item in latest if item.outcome == "FAILURE" or item.new_findings == 0]
+    warnings = [item for item in latest if item.outcome == "FAILURE" or item.item_count == 0]
     return templates.TemplateResponse(
         request,
         "behy.html",
@@ -77,16 +75,20 @@ def _zadani_view(zadani: Zadani) -> ZadaniView:
         return ZadaniView(zadani, f"čeká na odpověď, nejdéle do {deadline}", "waiting")
     if zadani.outcome == "FAILURE":
         return ZadaniView(zadani, f"Selhání: {zadani.reason or 'bez důvodu'}", "failure")
+    if zadani.item_count == 0:
+        return ZadaniView(zadani, "prázdný snímek (0 položek)", "warning")
     if zadani.new_findings is None:
         return ZadaniView(zadani, "odpověděl", "ok")
-    if zadani.new_findings == 0:
-        return ZadaniView(zadani, "0 nálezů", "warning")
-    return ZadaniView(zadani, _new_findings(zadani.new_findings), "ok")
+    result = _count(zadani.new_findings, "nový nález", "nové nálezy", "nových nálezů")
+    if zadani.item_count is not None:
+        result += f", ve snímku {_count(zadani.item_count, 'položka', 'položky', 'položek')}"
+    return ZadaniView(zadani, result, "ok")
 
 
-def _new_findings(count: int) -> str:
+def _count(count: int, one: str, few: str, many: str) -> str:
+    """Počet s českým tvarem: 1 položka, 2–4 položky, 0 a 5+ položek."""
     if count == 1:
-        return "1 nový nález"
+        return f"1 {one}"
     if 2 <= count <= 4:
-        return f"{count} nové nálezy"
-    return f"{count} nových nálezů"
+        return f"{count} {few}"
+    return f"{count} {many}"

@@ -23,10 +23,14 @@ log = logging.getLogger(__name__)
 
 
 class OdpovedSberu(TypedDict):
-    """Obsah INFORM od sběrného agenta: jen souhrn, samotné nálezy jsou na tabuli."""
+    """Obsah INFORM od sběrného agenta: jen přehled, samotné nálezy jsou na tabuli.
+
+    `item_count` je počet položek ve snímku; prázdný snímek web hlásí jako varování.
+    """
 
     snapshot_id: int
     new_findings: int
+    item_count: int
 
 
 class Agent:

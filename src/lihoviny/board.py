@@ -84,7 +84,7 @@ class Beh:
     started_at: datetime
 
 
-_BEH_COLUMNS = "id, kind, scheduled_for, started_at"
+BEH_COLUMNS = "id, kind, scheduled_for, started_at"
 
 
 @dataclass(frozen=True)
@@ -97,12 +97,14 @@ class Zadani:
     sent_at: datetime
     outcome: Literal["INFORM", "FAILURE"] | None
     new_findings: int | None
+    item_count: int | None
     reason: str | None
     answered_at: datetime | None
 
 
-_ZADANI_COLUMNS = (
-    "beh_id, agent, conversation_id, sent_at, outcome, new_findings, reason, answered_at"
+ZADANI_COLUMNS = (
+    "beh_id, agent, conversation_id, sent_at, outcome, new_findings, item_count, reason,"
+    " answered_at"
 )
 
 
@@ -238,7 +240,7 @@ class Board:
                     SELECT 1 FROM behy WHERE kind = %(kind)s AND scheduled_for = %(scheduled_for)s
                 )
                 ON CONFLICT (kind, scheduled_for) DO NOTHING
-                RETURNING {_BEH_COLUMNS}
+                RETURNING {BEH_COLUMNS}
                 """,
                 {"kind": kind, "scheduled_for": scheduled_for, "now": self._clock.now()},
             ).fetchone()
@@ -260,6 +262,7 @@ class Board:
         outcome: Literal["INFORM", "FAILURE"],
         *,
         new_findings: int | None = None,
+        item_count: int | None = None,
         reason: str | None = None,
     ) -> Zadani | None:
         """Zapíše, jak Zadání dopadlo. Platí první výsledek; jinak (a mimo běh) vrátí None."""
@@ -267,24 +270,32 @@ class Board:
             return cur.execute(
                 f"""
                 UPDATE zadani
-                SET outcome = %s, new_findings = %s, reason = %s, answered_at = %s
+                SET outcome = %s, new_findings = %s, item_count = %s, reason = %s,
+                    answered_at = %s
                 WHERE conversation_id = %s AND outcome IS NULL
-                RETURNING {_ZADANI_COLUMNS}
+                RETURNING {ZADANI_COLUMNS}
                 """,
-                [outcome, new_findings, reason, self._clock.now(), conversation_id],
+                [
+                    outcome,
+                    new_findings,
+                    item_count,
+                    reason,
+                    self._clock.now(),
+                    conversation_id,
+                ],
             ).fetchone()
 
     def latest_beh(self, kind: DruhBehu) -> Beh | None:
         with self._cursor(Beh) as cur:
             return cur.execute(
-                f"SELECT {_BEH_COLUMNS} FROM behy WHERE kind = %s ORDER BY id DESC LIMIT 1",
+                f"SELECT {BEH_COLUMNS} FROM behy WHERE kind = %s ORDER BY id DESC LIMIT 1",
                 [kind],
             ).fetchone()
 
     def zadani(self, beh_id: int) -> list[Zadani]:
         with self._cursor(Zadani) as cur:
             return cur.execute(
-                f"SELECT {_ZADANI_COLUMNS} FROM zadani WHERE beh_id = %s ORDER BY agent",
+                f"SELECT {ZADANI_COLUMNS} FROM zadani WHERE beh_id = %s ORDER BY agent",
                 [beh_id],
             ).fetchall()
 
@@ -292,7 +303,7 @@ class Board:
         with self._cursor(Zadani) as cur:
             return cur.execute(
                 f"""
-                SELECT {_ZADANI_COLUMNS} FROM zadani
+                SELECT {ZADANI_COLUMNS} FROM zadani
                 WHERE outcome IS NULL AND sent_at <= %s
                 ORDER BY sent_at, agent
                 """,

@@ -35,7 +35,7 @@ class SbernyA(Agent):
     role = "náhražka sběrného agenta"
 
     def handle_request(self, request):
-        return OdpovedSberu(snapshot_id=1, new_findings=2)
+        return OdpovedSberu(snapshot_id=1, new_findings=2, item_count=20)
 
 
 class SbernyB(SbernyA):
@@ -64,10 +64,11 @@ def new_zadani(bus, agent):
     return [m for m in messages if m.kind is Kind.REQUEST]
 
 
-def answer(bus, agent, new_findings=3):
+def answer(bus, agent, new_findings=3, item_count=20):
     """Sběrný agent vyzvedne Zadání a odpoví souhrnem podle kontraktu OdpovedSberu."""
     zadani = zadani_for(bus, agent)
-    bus.reply(zadani, Kind.INFORM, {"snapshot_id": 1, "new_findings": new_findings})
+    content = {"snapshot_id": 1, "new_findings": new_findings, "item_count": item_count}
+    bus.reply(zadani, Kind.INFORM, content)
     return zadani
 
 
@@ -221,7 +222,7 @@ def test_monday_brief_zadani_reaches_analyst_at_seven_with_results_of_the_collec
         "collection": {
             "beh_id": collection_zadani.content["beh_id"],
             "results": {
-                "sberny-a": {"outcome": "INFORM", "new_findings": 0},
+                "sberny-a": {"outcome": "INFORM", "new_findings": 0, "item_count": 20},
                 "sberny-b": {"outcome": "FAILURE", "reason": "HTTP 429"},
             },
         },
@@ -286,13 +287,13 @@ def test_manual_beh_that_cannot_start_answers_with_selhani(
     assert new_zadani(bus, "analyticky") == []
 
 
-def test_web_warns_about_sberni_agenti_that_found_nothing_or_failed_in_the_last_beh(
+def test_web_warns_about_sberni_agenti_with_empty_snapshot_or_selhani_in_the_last_beh(
     bus, clock, make_agent, web
 ):
     ridici = make_agent(RidiciSNahrazkami)
     start_manual_beh(bus)
     ridici.process_pending()
-    answer(bus, "sberny-a", new_findings=0)
+    answer(bus, "sberny-a", new_findings=0, item_count=0)
     zadani_for(bus, "sberny-b")  # mlčí
     ridici.process_pending()
     clock.advance(minutes=30)
@@ -302,15 +303,33 @@ def test_web_warns_about_sberni_agenti_that_found_nothing_or_failed_in_the_last_
 
     assert page.status_code == 200
     warnings = warnings_on(page)
-    assert "<strong>sberny-a</strong> vrátil 0 nálezů" in warnings
+    assert "<strong>sberny-a</strong> vrátil prázdný snímek (0 položek)" in warnings
     assert "<strong>sberny-b</strong> selhal: bez odpovědi do 30 minut" in warnings
+
+
+def test_web_does_not_warn_about_a_day_without_new_findings_when_the_snapshot_has_items(
+    bus, make_agent, web
+):
+    # Sortimentní agent běžně nenajde žádnou Novinku; zdroj přitom funguje.
+    ridici = make_agent(RidiciSNahrazkami)
+    start_manual_beh(bus)
+    ridici.process_pending()
+    answer(bus, "sberny-a", new_findings=0, item_count=150)
+    answer(bus, "sberny-b", new_findings=3, item_count=330)
+    ridici.process_pending()
+
+    page = web.get("/behy")
+
+    assert warnings_on(page) == ""
+    assert "0 nových nálezů, ve snímku 150 položek" in page.text
+    assert "3 nové nálezy, ve snímku 330 položek" in page.text
 
 
 def test_web_warning_disappears_once_the_sberny_agent_succeeds_in_a_later_beh(bus, make_agent, web):
     ridici = make_agent(RidiciSNahrazkami)
     start_manual_beh(bus)
     ridici.process_pending()
-    answer(bus, "sberny-a", new_findings=0)
+    answer(bus, "sberny-a", new_findings=0, item_count=0)
     fail(bus, "sberny-b", "HTTP 429")
     ridici.process_pending()
     assert warnings_on(web.get("/behy")) != ""

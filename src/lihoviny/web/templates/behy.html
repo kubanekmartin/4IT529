@@ -46,7 +46,7 @@
   <ul>
     {% for zadani in warnings %}
     <li>
-      <strong>{{ zadani.agent }}</strong> {% if zadani.outcome == "FAILURE" %}selhal: {{ zadani.reason or "bez důvodu" }}{% else %}vrátil 0 nálezů{% endif %}
+      <strong>{{ zadani.agent }}</strong> {% if zadani.outcome == "FAILURE" %}selhal: {{ zadani.reason or "bez důvodu" }}{% else %}vrátil prázdný snímek (0 položek){% endif %}
       <span class="muted">(poslední běh {{ zadani.beh_id }}, {{ zadani.answered_at | cas }})</span>
     </li>
     {% endfor %}
