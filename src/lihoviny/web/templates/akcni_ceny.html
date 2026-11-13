@@ -4,6 +4,8 @@
 
 {% block head %}
 <style>
+  /* Osm sloupců se do běžné šířky stránky nevejde; tabulka dostane víc místa. */
+  main { max-width: 80rem; }
   .offers { width: 100%; border-collapse: collapse; background: var(--surface); }
   .offers th, .offers td {
     padding: .5rem .6rem; border-bottom: 1px solid var(--border);
@@ -11,6 +13,7 @@
   }
   .offers th { font-size: .8rem; color: var(--muted); font-weight: 600; }
   .offers .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .offers .validity, .offers .chain { white-space: nowrap; }
   .offers .product a { color: var(--text); font-weight: 600; }
   .offers .price { font-weight: 700; color: var(--accent); }
   .offers .note { display: block; font-size: .8rem; color: var(--muted); font-weight: 400; }
@@ -67,14 +70,14 @@
     {% set c = offer.content %}
     <tr>
       <td class="product"><a href="{{ offer.source_url }}" rel="noopener">{{ c.product }}</a></td>
-      <td data-label="Řetězec">{% if c.flyer_url %}<a href="{{ c.flyer_url }}" rel="noopener" title="Leták">{{ c.chain }}</a>{% else %}{{ c.chain }}{% endif %}</td>
+      <td data-label="Řetězec" class="chain">{% if c.flyer_url %}<a href="{{ c.flyer_url }}" rel="noopener" title="Leták">{{ c.chain }}</a>{% else %}{{ c.chain }}{% endif %}</td>
       <td data-label="Akční cena" class="num">
         <span>
           <span class="price">{{ c.price | cislo }} Kč</span>{% if c.discount_percent %} <span class="muted">−{{ c.discount_percent }} %</span>{% endif %}
           {% if c.card_price is not none %}<span class="note">{{ c.card_label }}: {{ c.card_price | cislo }} Kč</span>{% endif %}
         </span>
       </td>
-      <td data-label="Platnost">{{ c | platnost }}</td>
+      <td data-label="Platnost" class="validity">{{ c | platnost }}</td>
       <td data-label="Objem" class="num">{% if c.volume_l %}{{ c.volume_l | kratce }} l{% else %}—{% endif %}</td>
       <td data-label="Alkohol" class="num">{% if c.abv_percent %}{{ c.abv_percent | kratce }} %{% else %}—{% endif %}</td>
       <td data-label="Kč za litr" class="num">{{ c.price_per_l | cislo }}</td>

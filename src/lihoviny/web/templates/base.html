@@ -8,13 +8,13 @@
   <style>
     :root {
       --bg: #f7f6f3; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6a66;
-      --border: #e2e0da; --accent: #8a3b12;
+      --border: #e2e0da; --accent: #8a3b12; --link: #1f5fa8;
       --request: #1f5fa8; --inform: #2c7a3f; --query: #8a6100; --failure: #b42318;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #161614; --surface: #1f1f1c; --text: #ecebe6; --muted: #a3a29c;
-        --border: #34332f; --accent: #e09a6b;
+        --border: #34332f; --accent: #e09a6b; --link: #8fbcf2;
         --request: #7fb0ec; --inform: #7ccf8f; --query: #e6c05c; --failure: #f2877d;
       }
     }
@@ -23,6 +23,8 @@
       margin: 0; background: var(--bg); color: var(--text);
       font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
     }
+    /* Výchozí modrá prohlížeče je na tmavém pozadí nečitelná; navštívené odkazy stejně. */
+    a { color: var(--link); }
     header {
       display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem;
       padding: 1rem; border-bottom: 1px solid var(--border); background: var(--surface);
