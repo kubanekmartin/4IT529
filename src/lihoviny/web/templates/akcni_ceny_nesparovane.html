@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Nespárované akční ceny{% endblock %}
+
+{% block head %}
+<style>
+  .items { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+  .item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .6rem .9rem; overflow-wrap: anywhere;
+  }
+  .item > a { color: var(--text); font-weight: 600; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: .1rem .9rem; margin-top: .15rem;
+    font-size: .875rem; color: var(--muted);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Nespárované akční ceny</h1>
+
+{% if snapshot %}
+<p class="muted">
+  Akční ceny platné k poslednímu snímku z akcniceny.cz
+  (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
+  ke kterým párování nenašlo produkt ze sortimentu rohlik.cz: {{ unpaired | length }} názvů
+  u zdroje z {{ offer_count }} akčních cen. Rohlík ve výpisu ukazuje jen část sortimentu, takže
+  jich je hodně; s každým novým produktem ve sortimentu se cenový agent pokusí o párování znovu.
+  Seznam slouží ke zlepšení párování. Všechny akční ceny jsou na stránce
+  <a href="/akcni-ceny">Akční ceny</a>.
+</p>
+
+{% if unpaired %}
+<ul class="items">
+  {% for item in unpaired %}
+  {% set c = item.content %}
+  <li class="item">
+    <a href="{{ item.source_url }}" rel="noopener">{{ c.product }}</a>
+    <div class="meta">
+      <span>{{ item.chains | join(", ") }}</span>
+      <span>výpis: {{ c.source_category }}</span>
+      <span>{% if c.volume_l %}{{ c.volume_l | kratce }} l{% else %}objem neuveden{% endif %} · {% if c.abv_percent %}{{ c.abv_percent | kratce }} %{% else %}alkohol neuveden{% endif %}</span>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Všechny platné akční ceny jsou spárované s produktem.</p>
+{% endif %}
+{% else %}
+<p>Cenový agent zatím nezachytil žádné akční ceny.</p>
+{% endif %}
+{% endblock %}

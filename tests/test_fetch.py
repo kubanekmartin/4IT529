@@ -1,5 +1,7 @@
 """Adaptér stahování proti simulovanému zdroji (httpx2.MockTransport), čas běží na FakeClock."""
 
+import hashlib
+
 import httpx2
 import pytest
 
@@ -43,6 +45,21 @@ def test_fetch_saves_raw_response_to_disk_and_identifies_without_personal_data(c
     user_agent = requests[0].headers["user-agent"]
     assert user_agent.startswith("lihoviny-mas/")
     assert "@" not in user_agent
+
+
+def test_fetch_with_minimize_saves_only_minimized_body_and_hash_of_original(clock, raw_dir):
+    body = "id|jméno\n1|Jan Novák\n".encode()
+    fetcher, _ = make_fetcher([httpx2.Response(200, content=body)], clock=clock, raw_dir=raw_dir)
+
+    page = fetcher.get(URL, minimize=lambda original: original.split(b"|")[0])
+
+    assert page.body == body  # agent čte celou odpověď, na disk jde jen zmenšená
+    meta, raw_body = read_raw(page.raw_path)
+    assert raw_body == b"id"
+    assert (meta["original_sha256"], meta["original_bytes"]) == (
+        hashlib.sha256(body).hexdigest(),
+        len(body),
+    )
 
 
 def test_fetch_pauses_between_requests_to_the_same_source(clock, raw_dir):

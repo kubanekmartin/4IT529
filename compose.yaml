@@ -97,6 +97,29 @@ services:
     command: ["lihoviny", "agent", "cenovy"]
     environment:
       <<: *agent-env
+      LLM_MODEL_CENOVY: ${LLM_MODEL_CENOVY:-}
+    volumes:
+      - rawdata:/data/raw
+
+  # KIQ 3: články o lihovinách ze zboziaprodej.cz (WordPress REST API), třídí je LLM.
+  # Ruční běh: docker compose exec medialni lihoviny zadani medialni --cekat 600
+  medialni:
+    <<: *app
+    command: ["lihoviny", "agent", "medialni"]
+    environment:
+      <<: *agent-env
+      LLM_MODEL_MEDIALNI: ${LLM_MODEL_MEDIALNI:-}
+    volumes:
+      - rawdata:/data/raw
+
+  # KIQ 4: sněmovní tisky o alkoholu z otevřených dat Sněmovny (psp.cz), posoudí LLM.
+  # Ruční běh: docker compose exec regulatorni lihoviny zadani regulatorni --cekat 300
+  regulatorni:
+    <<: *app
+    command: ["lihoviny", "agent", "regulatorni"]
+    environment:
+      <<: *agent-env
+      LLM_MODEL_REGULATORNI: ${LLM_MODEL_REGULATORNI:-}
     volumes:
       - rawdata:/data/raw
 

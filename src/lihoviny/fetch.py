@@ -5,6 +5,8 @@ při 429 a dočasné chybě serveru (500, 502, 503, 504) to zkusí celkem třikr
 pauzou a respektuje `Retry-After`. Ostatní chyby (i 501 a 505) jsou trvalé, další pokus
 nepomůže.
 Každou úspěšnou odpověď uloží zabalenou (gzip) na disk, aby šla zpětně znovu zpracovat.
+Odpověď s osobními údaji (jmény) agent zmenší funkcí `minimize`: na disk jde jen její výsledek
+a v metadatech otisk SHA-256 a velikost původní odpovědi, které doloží její původ.
 V testech ho nahradí `FakeFetcher`, který místo webu vrací uložené ukázky stránek.
 """
 
@@ -12,6 +14,7 @@ import email.utils
 import gzip
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +29,9 @@ from lihoviny.clock import Clock
 USER_AGENT = "lihoviny-mas/0.1 (studijni prototyp, nekomercni)"
 
 _RETRYABLE = {429, 500, 502, 503, 504}
+
+# Z těla odpovědi udělá podobu, která se smí uložit na disk (bez jmen osob).
+Minimize = Callable[[bytes], bytes]
 
 
 class FetchError(Exception):
@@ -47,7 +53,9 @@ class FetchResult:
 
 
 class Fetcher(Protocol):
-    def get(self, url: str) -> FetchResult: ...
+    def get(self, url: str, *, minimize: Minimize | None = None) -> FetchResult:
+        """`body` výsledku je celá odpověď; s `minimize` se na disk uloží jen její výsledek."""
+        ...
 
 
 class HttpFetcher:
@@ -75,7 +83,7 @@ class HttpFetcher:
             transport=transport,
         )
 
-    def get(self, url: str) -> FetchResult:
+    def get(self, url: str, *, minimize: Minimize | None = None) -> FetchResult:
         host = urlsplit(url).hostname or ""
         problem = ""
         for attempt in range(1, self._attempts + 1):
@@ -87,7 +95,7 @@ class HttpFetcher:
                 problem = f"{type(error).__name__}: {error}"
             else:
                 if response.status_code < 400:
-                    return self._result(url, response)
+                    return self._result(url, response, minimize)
                 problem = f"HTTP {response.status_code}"
                 if response.status_code not in _RETRYABLE:
                     raise FetchError(f"{url}: {problem}")
@@ -115,11 +123,19 @@ class HttpFetcher:
             return 0.0
         return max((until - self._clock.now()).total_seconds(), 0.0)
 
-    def _result(self, url: str, response: httpx2.Response) -> FetchResult:
+    def _result(
+        self, url: str, response: httpx2.Response, minimize: Minimize | None
+    ) -> FetchResult:
         fetched_at = self._clock.now()
         headers = dict(response.headers)
         raw_path = save_raw(
-            self._raw_dir, url, response.status_code, headers, response.content, fetched_at
+            self._raw_dir,
+            url,
+            response.status_code,
+            headers,
+            response.content,
+            fetched_at,
+            minimize=minimize,
         )
         return FetchResult(
             url, response.status_code, headers, response.content, fetched_at, raw_path
@@ -135,7 +151,7 @@ class FakeFetcher:
         self._clock = clock
         self.requested: list[str] = []
 
-    def get(self, url: str) -> FetchResult:
+    def get(self, url: str, *, minimize: Minimize | None = None) -> FetchResult:
         self.requested.append(url)
         if url not in self._routes:
             raise FetchError(f"{url}: náhražka pro tuto adresu nemá ukázku")
@@ -144,19 +160,37 @@ class FakeFetcher:
             raise route
         body = route.read_bytes() if isinstance(route, Path) else route
         fetched_at = self._clock.now()
-        raw_path = save_raw(self._raw_dir, url, 200, {}, body, fetched_at)
+        raw_path = save_raw(self._raw_dir, url, 200, {}, body, fetched_at, minimize=minimize)
         return FetchResult(url, 200, {}, body, fetched_at, raw_path)
 
 
 def save_raw(
-    raw_dir: Path, url: str, status: int, headers: dict[str, str], body: bytes, fetched_at: datetime
+    raw_dir: Path,
+    url: str,
+    status: int,
+    headers: dict[str, str],
+    body: bytes,
+    fetched_at: datetime,
+    *,
+    minimize: Minimize | None = None,
 ) -> Path:
-    """Uloží odpověď jako gzip: první řádek JSON s metadaty, za ním surové tělo."""
+    """Uloží odpověď jako gzip: první řádek JSON s metadaty, za ním surové tělo.
+
+    S `minimize` jde na disk jen zmenšené tělo; metadata mají otisk a velikost původního.
+    """
+    meta: dict[str, Any] = {
+        "url": url,
+        "status": status,
+        "fetched_at": fetched_at.isoformat(),
+        "headers": headers,
+    }
+    if minimize is not None:
+        meta |= {"original_sha256": hashlib.sha256(body).hexdigest(), "original_bytes": len(body)}
+        body = minimize(body)
     host = urlsplit(url).hostname or "neznamy-zdroj"
     name = f"{fetched_at:%H%M%S%f}-{hashlib.sha256(body).hexdigest()[:12]}.gz"
     path = raw_dir / host / f"{fetched_at:%Y-%m-%d}" / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    meta = {"url": url, "status": status, "fetched_at": fetched_at.isoformat(), "headers": headers}
     with gzip.open(path, "wb") as file:
         file.write(json.dumps(meta, ensure_ascii=False).encode() + b"\n")
         file.write(body)

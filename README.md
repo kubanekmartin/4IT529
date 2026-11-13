@@ -11,10 +11,14 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | Stránka | Co |
 | --- | --- |
 | `/brief` | aktuální Brief (na něj vede `/`), `/brief/archiv` starší Briefy |
-| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
-| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny |
+| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s kategorií, cenou za litr a za litr etanolu |
+| `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
+| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím |
+| `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
+| `/architektura` | agenti, jejich role a zdroje, diagram komunikace, druhy zpráv a sdílená tabule |
 
 ## Spuštění celého systému
 
@@ -74,7 +78,9 @@ Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin,
 nápoj…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
 akční cena: cena, případně cena s věrnostní kartou, sleva, platnost a odkaz na leták. Objem
 a obsah alkoholu čte z názvu produktu stejně jako sortimentní agent; z nich počítá cenu za
-litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM nepotřebuje:
+litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM potřebuje jen jako
+zálohu při párování (viz níže); bez `ANTHROPIC_API_KEY` akční ceny sbírá dál, jen jich víc
+zůstane nespárovaných:
 
 ```sh
 docker compose exec cenovy lihoviny zadani cenovy --cekat 180
@@ -85,6 +91,64 @@ a konec platnosti); každý snímek si pamatuje, které akční ceny obsahoval. 
 <http://127.0.0.1:8510/akcni-ceny> ukazuje akční ceny platné k poslednímu snímku: s datem
 konce do jeho data, bez data konce, dokud je poslední snímek obsahuje. Odkaz na produkt se
 bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
+
+Párování akčních cen na produkty ze sortimentu (`src/lihoviny/pairing.py`) jde podle názvu
+u zdroje, takže všechny akční ceny se stejným názvem patří k jednomu produktu:
+
+- Normalizovaný klíč jako u sortimentního agenta (značka a název, objem, obsah alkoholu),
+  z názvu se jen vynechá objem. Když název obsah alkoholu neuvádí, stačí shoda názvu
+  a objemu s jediným produktem. Dárkové balení stejného objemu je týž produkt.
+- Zbytek posoudí LLM, ale jen u akčních cen s kandidáty: produkt téže značky se stejným
+  objemem a obsahem alkoholu (pokud je název uvádí). Akční cena na „vybrané druhy“ není
+  jeden produkt a zůstane nespárovaná. Odmítnuté dvojice si agent pamatuje (tabulka
+  `rejected_pairings`) a stejnou otázku LLM nepoloží znovu.
+- Při každém Zadání se párují nové i dřív nespárované akční ceny, takže akční cena se
+  spáruje i dodatečně, jakmile sortimentní agent produkt zapíše (obvykle o den později:
+  oba agenti běží v 6:00 současně). Rohlík ve výpisu ukazuje jen asi 14 produktů na
+  podkategorii, nespárovaných je proto zatím většina.
+- Spárovaná akční cena převezme z produktu obsah alkoholu (a objem, když ho název neuvádí)
+  a dopočítá cenu za litr etanolu. Web ukáže kategorii u akční ceny, akční ceny u produktu
+  na `/sortiment` a nespárované zvlášť na `/akcni-ceny/nesparovane`.
+
+### Mediální agent (KIQ 3, zboziaprodej.cz)
+
+Jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
+jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
+a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
+vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
+LLM žádný článek neposuzuje dvakrát. Potřebuje `ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec medialni lihoviny zadani medialni --cekat 600
+```
+
+Jména osob se neukládají: nález odkazuje na článek krátkým odkazem `?p=<ID>` (adresa se
+slugem opakuje titulek i se jmény), titulek a shrnutí píše LLM bez jmen a agent v nich jména,
+která LLM v článku našel, ještě nahradí slovem „[osoba]“. Články ukáže stránka
+<http://127.0.0.1:8510/komunikace>.
+
+### Regulatorní agent (KIQ 4, otevřená data Sněmovny)
+
+Stáhne dva archivy [otevřených dat Poslanecké sněmovny](https://www.psp.cz/sqw/hp.sqw?k=1300):
+sněmovní tisky (`tisky.zip`, asi 4 MB) a poslance s orgány (`poslanci.zip`, kvůli poslaneckým
+klubům). Zdroj je obnovuje jednou denně v noci a vždy s úplným stavem, takže agent stáhne
+každý jednou za Zadání. Bere tisky probíhajícího volebního období kromě písemných interpelací.
+Nové tisky (které agent v dřívějším snímku neviděl) projdou filtrem klíčových slov v názvu
+(líh, alkohol, spotřební daň, reklama, prodej, značení, obaly, návykové látky, DPH…) a jen ty
+posoudí LLM: relevance pro výrobce lihovin, dopad a odhad termínu účinnosti. Potřebuje
+`ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec regulatorni lihoviny zadani regulatorni --cekat 300
+```
+
+Výchozí (první) snímek bere jako nové všechny tisky období, takže stránka
+<http://127.0.0.1:8510/regulace> hned ukáže projednávané tisky, které se lihovin týkají
+(označené „výchozí snímek“). Jména osob systém neukládá: navrhovatel je „vláda (min. financí)“,
+„skupina poslanců (ODS)“ (klub v den předložení) nebo „Senát“, jména z úplného názvu agent
+vypustí a tabulku osob nečte. Na disk místo archivů jde jen to, co agent z archivů přečetl
+(tisky bez jmen, kluby, ID osob), a otisk SHA-256 původního archivu. Podmínky otevřených dat
+chtějí uvést zdroj a datum zpracování; stránka je uvádí pod seznamem.
 
 ## Řídicí agent a běhy
 
@@ -198,13 +262,13 @@ docker buildx build --platform linux/arm64 .
 | `src/lihoviny/bus.py` | sběrnice zpráv (REQUEST = Zadání, INFORM, QUERY = Dotaz, FAILURE = Selhání) |
 | `src/lihoviny/agent.py` | společný základ agenta, obsah odpovědi sběrného agenta |
 | `src/lihoviny/agents/` | jednotliví agenti a jejich registr |
-| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty, běhy řídicího agenta se Zadáními a Briefy |
+| `src/lihoviny/board.py` | sdílená tabule: snímky, nálezy, produkty, viděné sněmovní tisky, běhy řídicího agenta se Zadáními a Briefy |
 | `src/lihoviny/db.py` | připojení k Postgresu a transakce přes sběrnici i tabuli |
 | `src/lihoviny/products.py` | kategorie, normalizovaný klíč produktu, objem a obsah alkoholu z názvu |
 | `src/lihoviny/zadavatel.toml` | portfolio zadavatele a sledovaní konkurenti (načítá `zadavatel.py`) |
 | `src/lihoviny/charts.py` | grafy Briefu jako SVG |
 | `src/lihoviny/clock.py` | hodiny (skutečné a pro testy), pražský čas |
-| `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka |
+| `src/lihoviny/fetch.py` | adaptér stahování a jeho náhražka (na disk ukládá surová data, případně zmenšená bez jmen) |
 | `src/lihoviny/llm.py` | adaptér LLM (Claude API) a jeho náhražka |
 | `src/lihoviny/migrations/` | číslované migrace `NNNN_popis.sql` |
 | `src/lihoviny/web/` | web (FastAPI, šablony Jinja2) |

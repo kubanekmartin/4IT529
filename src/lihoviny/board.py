@@ -2,14 +2,17 @@
 
 Sběrný agent po stažení zdroje zapíše jeden snímek (odkazuje na surová data na disku)
 a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady. Produkty zapisuje
-sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat.
+sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat. Cenový
+agent akční cenu spáruje s produktem i dodatečně (`record_pairing`), jakmile produkt přibude.
+Mediální agent si eviduje viděné články (jen jejich ID u zdroje).
+Regulatorní agent si sem zapisuje ID sněmovních tisků, které už viděl.
 
 Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání a jak každé dopadlo.
 Analytický agent sem zapisuje Briefy a u každého nálezy, o které se opírá.
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -274,12 +277,77 @@ class Board:
             ).fetchall()
         return [finding_id for (finding_id,) in rows]
 
+    def record_pairing(self, finding_id: int, *, product_id: int, content: dict[str, Any]) -> None:
+        """Spáruje dřívější nespárovaný nález s produktem; obsah nahradí doplněným."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                UPDATE findings SET product_id = %s, content = %s
+                WHERE id = %s AND product_id IS NULL
+                """,
+                [product_id, Jsonb(content), finding_id],
+            )
+
+    def rejected_pairings(self) -> set[tuple[str, int]]:
+        """Dvojice (název akční ceny, ID produktu), které LLM posoudil jako různé produkty."""
+        with self._cursor() as cur:
+            return set(cur.execute("SELECT offer_name, product_id FROM rejected_pairings"))
+
+    def record_rejected_pairings(self, pairs: Iterable[tuple[str, int]]) -> None:
+        with self._cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO rejected_pairings (offer_name, product_id) VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                list(pairs),
+            )
+
     def record_snapshot_findings(self, snapshot_id: int, finding_ids: Sequence[int]) -> None:
         """Zapíše, které nálezy (i dřívější) snímek u zdroje znovu viděl."""
         with self._cursor() as cur:
             cur.executemany(
                 "INSERT INTO snapshot_findings (snapshot_id, finding_id) VALUES (%s, %s)",
                 [(snapshot_id, finding_id) for finding_id in finding_ids],
+            )
+
+    def record_article(
+        self,
+        *,
+        source: str,
+        source_article_id: int,
+        first_seen_snapshot_id: int,
+        finding_id: int | None,
+    ) -> None:
+        """Zapíše článek, který mediální agent viděl poprvé; `finding_id` None = nerelevantní."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO articles
+                    (source, source_article_id, first_seen_snapshot_id, finding_id)
+                VALUES (%s, %s, %s, %s)
+                """,
+                [source, source_article_id, first_seen_snapshot_id, finding_id],
+            )
+
+    def article_ids(self, *, source: str) -> set[int]:
+        with self._cursor() as cur:
+            rows = cur.execute(
+                "SELECT source_article_id FROM articles WHERE source = %s", [source]
+            ).fetchall()
+        return {row[0] for row in rows}
+
+    def known_tisky(self) -> set[int]:
+        """ID sněmovních tisků (z otevřených dat), které regulatorní agent už viděl."""
+        with self._cursor() as cur:
+            return {row[0] for row in cur.execute("SELECT source_id FROM snemovni_tisky")}
+
+    def record_tisky(self, snapshot_id: int, source_ids: Sequence[int]) -> None:
+        """Zapíše sněmovní tisky, které snímek viděl poprvé."""
+        with self._cursor() as cur:
+            cur.executemany(
+                "INSERT INTO snemovni_tisky (source_id, first_seen_snapshot_id) VALUES (%s, %s)",
+                [(source_id, snapshot_id) for source_id in source_ids],
             )
 
     def start_beh(self, kind: DruhBehu, *, scheduled_for: datetime | None = None) -> Beh | None:

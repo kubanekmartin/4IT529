@@ -4,7 +4,7 @@
 
 {% block head %}
 <style>
-  /* Osm sloupců se do běžné šířky stránky nevejde; tabulka dostane víc místa. */
+  /* Devět sloupců se do běžné šířky stránky nevejde; tabulka dostane víc místa. */
   main { max-width: 80rem; }
   .offers { width: 100%; border-collapse: collapse; background: var(--surface); }
   .offers th, .offers td {
@@ -14,7 +14,7 @@
   .offers th { font-size: .8rem; color: var(--muted); font-weight: 600; }
   .offers .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .offers .validity, .offers .chain { white-space: nowrap; }
-  .offers .product a { color: var(--text); font-weight: 600; }
+  .offers .product > a { color: var(--text); font-weight: 600; }
   .offers .price { font-weight: 700; color: var(--accent); }
   .offers .note { display: block; font-size: .8rem; color: var(--muted); font-weight: 400; }
   .offers .ethanol { font-weight: 700; }
@@ -48,14 +48,22 @@
 <p class="muted">
   Akční ceny platné k poslednímu snímku z akcniceny.cz
   (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
-  celkem {{ offers | length }}. Produkt je uvedený tak, jak ho píše zdroj. Cena za litr etanolu
-  je jen tam, kde zdroj uvádí obsah alkoholu.
+  celkem {{ offers | length }}. Produkt je uvedený tak, jak ho píše zdroj; kategorii má akční cena
+  spárovaná s produktem ze sortimentu rohlik.cz. Cena za litr etanolu je jen tam, kde obsah
+  alkoholu uvádí zdroj nebo spárovaný produkt.
 </p>
+{% if unpaired_count %}
+<p class="muted">
+  Nespárovaných akčních cen je {{ unpaired_count }} (Rohlík ve výpisu ukazuje jen část sortimentu):
+  <a href="/akcni-ceny/nesparovane">seznam nespárovaných</a>.
+</p>
+{% endif %}
 
 <table class="offers">
   <thead>
     <tr>
       <th scope="col">Produkt</th>
+      <th scope="col">Kategorie</th>
       <th scope="col">Řetězec</th>
       <th scope="col" class="num">Akční cena</th>
       <th scope="col">Platnost</th>
@@ -69,7 +77,11 @@
     {% for offer in offers %}
     {% set c = offer.content %}
     <tr>
-      <td class="product"><a href="{{ offer.source_url }}" rel="noopener">{{ c.product }}</a></td>
+      <td class="product">
+        <a href="{{ offer.source_url }}" rel="noopener">{{ c.product }}</a>
+        {% if offer.product_id %}<span class="note">v sortimentu: <a href="/sortiment#produkt-{{ offer.product_id }}">{{ offer.product_name }}</a></span>{% endif %}
+      </td>
+      <td data-label="Kategorie">{% if offer.category %}{{ categories[offer.category] }}{% else %}<span class="muted">nespárováno</span>{% endif %}</td>
       <td data-label="Řetězec" class="chain">{% if c.flyer_url %}<a href="{{ c.flyer_url }}" rel="noopener" title="Leták">{{ c.chain }}</a>{% else %}{{ c.chain }}{% endif %}</td>
       <td data-label="Akční cena" class="num">
         <span>
@@ -78,8 +90,8 @@
         </span>
       </td>
       <td data-label="Platnost" class="validity">{{ c | platnost }}</td>
-      <td data-label="Objem" class="num">{% if c.volume_l %}{{ c.volume_l | kratce }} l{% else %}—{% endif %}</td>
-      <td data-label="Alkohol" class="num">{% if c.abv_percent %}{{ c.abv_percent | kratce }} %{% else %}—{% endif %}</td>
+      <td data-label="Objem" class="num">{% if c.volume_l %}<span>{{ c.volume_l | kratce }} l{% if "volume_l" in c.from_product %}<span class="note">ze sortimentu</span>{% endif %}</span>{% else %}—{% endif %}</td>
+      <td data-label="Alkohol" class="num">{% if c.abv_percent %}<span>{{ c.abv_percent | kratce }} %{% if "abv_percent" in c.from_product %}<span class="note">ze sortimentu</span>{% endif %}</span>{% else %}—{% endif %}</td>
       <td data-label="Kč za litr" class="num">{{ c.price_per_l | cislo }}</td>
       <td data-label="Kč za litr etanolu" class="num ethanol">{{ c.price_per_l_ethanol | cislo }}</td>
     </tr>

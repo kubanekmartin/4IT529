@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 from test_cenovy import make_cenovy
 
 from lihoviny.agents.analyticky import Analyticky, BriefText
+from lihoviny.agents.medialni import Medialni
+from lihoviny.agents.regulatorni import Regulatorni
 from lihoviny.agents.ridici import ANSWER_LIMIT, Ridici
 from lihoviny.agents.sortimentni import Sortimentni
 from lihoviny.bus import Kind
@@ -497,8 +499,9 @@ def test_writing_the_brief_may_take_longer_than_extraction_but_ends_before_ridic
 def test_monday_beh_runs_from_ridici_through_sberni_agenti_to_the_brief_on_the_web(
     board, clock, raw_dir, make_agent, start_agent, web
 ):
-    # Cenový agent čte uložené ukázky akcniceny.cz, sortimentní nedostane stránku (Selhání).
-    # Nálezy čísluje čerstvá databáze od 1; připravený text Briefu cituje první dvě akční ceny.
+    # Cenový agent čte uložené ukázky akcniceny.cz; ostatní sběrní agenti nedostanou stránku
+    # zdroje a ohlásí Selhání. Nálezy čísluje čerstvá databáze od 1; připravený text Briefu
+    # cituje první dvě akční ceny.
     llm = FakeLlm(
         brief_text(
             what_happened=[(2, "Řetězce zlevnily tuzemák.", [1, 2])],
@@ -508,6 +511,8 @@ def test_monday_beh_runs_from_ridici_through_sberni_agenti_to_the_brief_on_the_w
     for agent in [
         make_cenovy(make_agent, clock, raw_dir),
         make_agent(Sortimentni),
+        make_agent(Medialni),
+        make_agent(Regulatorni),
         make_agent(Analyticky, llm=llm),
         make_agent(Ridici),
     ]:
@@ -528,6 +533,9 @@ def test_monday_beh_runs_from_ridici_through_sberni_agenti_to_the_brief_on_the_w
     assert f'href="{second.source_url}"' in promo
     gaps = section(html, "Selhání sběru")
     assert "<strong>KIQ 1</strong> (sortimentni): https://www.rohlik.cz/c300108072-lihoviny" in gaps
+    assert "<strong>KIQ 3</strong> (medialni): " in gaps
+    assert "<strong>KIQ 4</strong> (regulatorni): " in gaps
+    assert "cenovy" not in gaps
     assert "Tuzemák držet bez akční ceny." in section(html, "Doporučení k portfoliu zadavatele")
     assert "<strong>bez dat</strong>" in kiq_block(html, 3)
     [brief_zadani] = board.zadani(board.latest_beh("brief").id)
