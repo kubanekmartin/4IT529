@@ -8,7 +8,7 @@ odpověď na sběrnici a nálezy na tabuli.
 import re
 from pathlib import Path
 
-from lihoviny.agent import Agent, CollectorResult
+from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.bus import Kind
 from lihoviny.fetch import FakeFetcher, FetchError, read_raw
 
@@ -35,14 +35,14 @@ class UkazkovySberny(Agent):
                 source_url=page.url,
                 content={"produkt": product, "cena": int(price)},
             )
-        return CollectorResult(snapshot_id=snapshot.id, new_findings=len(items))
+        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=len(items))
 
 
 def send_zadani(bus):
     return bus.send(kind=Kind.REQUEST, sender="ridici", recipient="ukazkovy", content={})
 
 
-def test_collector_answers_with_summary_and_puts_findings_on_board(
+def test_sberny_agent_answers_with_summary_and_puts_findings_on_board(
     bus, board, clock, raw_dir, make_agent
 ):
     fixture = FIXTURES / "ukazka" / "akce.html"

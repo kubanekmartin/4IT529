@@ -1,4 +1,4 @@
-"""Stránka Akční ceny (KIQ 2): akce lihovin a RTD platné k času posledního snímku.
+"""Stránka Akční ceny (KIQ 2): akční ceny lihovin a RTD platné k času posledního snímku.
 
 „Platné“ se počítá k datu posledního snímku cenového agenta, ne k dnešku: když sběr
 vypadne, stránka ukáže stav, jaký byl, a čas snímku nad tabulkou to přizná.

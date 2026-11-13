@@ -2,7 +2,8 @@ name: Ruční Zadání
 
 # Pošle Zadání agentovi na serveru jménem člena týmu (`lihoviny zadani`) a vypíše odpověď.
 # Zadání i odpověď jsou pak v logu komunikace na https://lihoviny.kubanekmartin.cz/log.
-# Příklad: příjemce `ozvena`, obsah {"text": "ahoj"}; pro předvedení běhu příjemce `ridici`.
+# Příklad: příjemce `ozvena`, obsah {"text": "ahoj"}. Ruční běh: příjemce `ridici`, obsah {}
+# (denní sběr) nebo {"beh": "brief"} (Brief).
 
 on:
   workflow_dispatch:

@@ -23,7 +23,7 @@ from lihoviny.fetch import FetchResult
 from lihoviny.products import Category
 
 FindingType = Literal["novinka", "akcni_cena", "clanek", "snemovni_tisk"]
-RunKind = Literal["collection", "brief"]
+DruhBehu = Literal["collection", "brief"]
 
 
 @dataclass(frozen=True)
@@ -76,21 +76,21 @@ _PRODUCT_COLUMNS = (
 
 
 @dataclass(frozen=True)
-class Run:
+class Beh:
     id: int
-    kind: RunKind
+    kind: DruhBehu
     scheduled_for: datetime | None
     started_at: datetime
 
 
-_RUN_COLUMNS = "id, kind, scheduled_for, started_at"
+_BEH_COLUMNS = "id, kind, scheduled_for, started_at"
 
 
 @dataclass(frozen=True)
-class RunTask:
+class Zadani:
     """Zadání v běhu; `outcome` None = agent ještě neodpověděl."""
 
-    run_id: int
+    beh_id: int
     agent: str
     conversation_id: uuid.UUID
     sent_at: datetime
@@ -100,8 +100,8 @@ class RunTask:
     answered_at: datetime | None
 
 
-_RUN_TASK_COLUMNS = (
-    "run_id, agent, conversation_id, sent_at, outcome, new_findings, reason, answered_at"
+_ZADANI_COLUMNS = (
+    "beh_id, agent, conversation_id, sent_at, outcome, new_findings, reason, answered_at"
 )
 
 
@@ -224,33 +224,33 @@ class Board:
                 {"kiq": kiq, "snapshot_id": snapshot_id},
             ).fetchall()
 
-    def start_run(self, kind: RunKind, *, scheduled_for: datetime | None = None) -> Run | None:
+    def start_beh(self, kind: DruhBehu, *, scheduled_for: datetime | None = None) -> Beh | None:
         """Zahájí běh. Termín rozvrhu, za který už běh proběhl, vrátí None."""
-        with self._connect(Run) as conn:
+        with self._connect(Beh) as conn:
             # NOT EXISTS místo samotného ON CONFLICT: to by při každém pokusu spotřebovalo
             # číslo běhu, a řídicí agent se na termín ptá každých 30 s.
             return conn.execute(
                 f"""
-                INSERT INTO runs (kind, scheduled_for, started_at)
+                INSERT INTO behy (kind, scheduled_for, started_at)
                 SELECT %(kind)s, %(scheduled_for)s, %(now)s
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM runs WHERE kind = %(kind)s AND scheduled_for = %(scheduled_for)s
+                    SELECT 1 FROM behy WHERE kind = %(kind)s AND scheduled_for = %(scheduled_for)s
                 )
                 ON CONFLICT (kind, scheduled_for) DO NOTHING
-                RETURNING {_RUN_COLUMNS}
+                RETURNING {_BEH_COLUMNS}
                 """,
                 {"kind": kind, "scheduled_for": scheduled_for, "now": self._clock.now()},
             ).fetchone()
 
-    def add_run_task(self, *, run_id: int, agent: str, conversation_id: uuid.UUID) -> None:
+    def add_zadani(self, *, beh_id: int, agent: str, conversation_id: uuid.UUID) -> None:
         """Zapíše Zadání do běhu; od této chvíle běží agentovi limit na odpověď."""
         with psycopg.connect(self._database_url) as conn:
             conn.execute(
                 """
-                INSERT INTO run_tasks (run_id, agent, conversation_id, sent_at)
+                INSERT INTO zadani (beh_id, agent, conversation_id, sent_at)
                 VALUES (%s, %s, %s, %s)
                 """,
-                [run_id, agent, conversation_id, self._clock.now()],
+                [beh_id, agent, conversation_id, self._clock.now()],
             )
 
     def record_outcome(
@@ -260,38 +260,38 @@ class Board:
         *,
         new_findings: int | None = None,
         reason: str | None = None,
-    ) -> RunTask | None:
+    ) -> Zadani | None:
         """Zapíše, jak Zadání dopadlo. Platí první výsledek; jinak (a mimo běh) vrátí None."""
-        with self._connect(RunTask) as conn:
+        with self._connect(Zadani) as conn:
             return conn.execute(
                 f"""
-                UPDATE run_tasks
+                UPDATE zadani
                 SET outcome = %s, new_findings = %s, reason = %s, answered_at = %s
                 WHERE conversation_id = %s AND outcome IS NULL
-                RETURNING {_RUN_TASK_COLUMNS}
+                RETURNING {_ZADANI_COLUMNS}
                 """,
                 [outcome, new_findings, reason, self._clock.now(), conversation_id],
             ).fetchone()
 
-    def latest_run(self, kind: RunKind) -> Run | None:
-        with self._connect(Run) as conn:
+    def latest_beh(self, kind: DruhBehu) -> Beh | None:
+        with self._connect(Beh) as conn:
             return conn.execute(
-                f"SELECT {_RUN_COLUMNS} FROM runs WHERE kind = %s ORDER BY id DESC LIMIT 1",
+                f"SELECT {_BEH_COLUMNS} FROM behy WHERE kind = %s ORDER BY id DESC LIMIT 1",
                 [kind],
             ).fetchone()
 
-    def run_tasks(self, run_id: int) -> list[RunTask]:
-        with self._connect(RunTask) as conn:
+    def zadani(self, beh_id: int) -> list[Zadani]:
+        with self._connect(Zadani) as conn:
             return conn.execute(
-                f"SELECT {_RUN_TASK_COLUMNS} FROM run_tasks WHERE run_id = %s ORDER BY agent",
-                [run_id],
+                f"SELECT {_ZADANI_COLUMNS} FROM zadani WHERE beh_id = %s ORDER BY agent",
+                [beh_id],
             ).fetchall()
 
-    def waiting_tasks(self, *, sent_before: datetime) -> list[RunTask]:
-        with self._connect(RunTask) as conn:
+    def waiting_zadani(self, *, sent_before: datetime) -> list[Zadani]:
+        with self._connect(Zadani) as conn:
             return conn.execute(
                 f"""
-                SELECT {_RUN_TASK_COLUMNS} FROM run_tasks
+                SELECT {_ZADANI_COLUMNS} FROM zadani
                 WHERE outcome IS NULL AND sent_at <= %s
                 ORDER BY sent_at, agent
                 """,

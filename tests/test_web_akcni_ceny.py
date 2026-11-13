@@ -20,7 +20,7 @@ def collected(bus, clock, raw_dir, make_agent):
 
 
 def row(html, product, chain):
-    """Řádek tabulky s akcí daného produktu v daném řetězci."""
+    """Řádek tabulky s akční cenou daného produktu v daném řetězci."""
     (found,) = [r for r in html.split("<tr>") if f">{product}</a>" in r and f">{chain}<" in r]
     return found[: found.index("</tr>")]
 
@@ -51,7 +51,7 @@ def test_akcni_ceny_page_shows_card_price_future_start_and_unknown_ethanol_price
     assert "16. 11. – 17. 11. 2026" in fernet[0]
 
 
-def test_akcni_ceny_page_hides_akce_that_ended_before_the_last_snapshot(web, collected):
+def test_akcni_ceny_page_hides_akcni_ceny_that_ended_before_the_last_snapshot(web, collected):
     html = web.get("/akcni-ceny").text
 
     # Lidl měl Božkov Original jen do 15. 11., Košík.cz Cointreau do 13. 11.

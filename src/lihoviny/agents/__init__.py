@@ -1,7 +1,7 @@
 """Registr agentů: jméno na sběrnici → třída. `lihoviny agent <jméno>` spouští odsud.
 
 Nový agent = modul v tomto balíčku, řádek v `AGENTS` a služba v `compose.yaml`.
-Sběrný agent navíc patří do `Ridici.collectors` (agents/ridici.py), jinak nedostane Zadání.
+Sběrný agent navíc patří do `Ridici.sberni_agenti` (agents/ridici.py), jinak nedostane Zadání.
 """
 
 from lihoviny.agent import Agent

@@ -17,7 +17,7 @@
   .offers .ethanol { font-weight: 700; }
   .source { font-size: .875rem; }
 
-  /* Na úzkém displeji je každá akce kartička: řádek tabulky se poskládá pod sebe. */
+  /* Na úzkém displeji je každá akční cena kartička: řádek tabulky se poskládá pod sebe. */
   @media (max-width: 47.99rem) {
     .offers, .offers tbody, .offers tr, .offers td { display: block; }
     .offers thead { display: none; }
@@ -43,9 +43,9 @@
 
 {% if snapshot %}
 <p class="muted">
-  Akce platné k poslednímu snímku z akcniceny.cz
-  (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>):
-  {{ offers | length }} akcí. Produkt je uvedený tak, jak ho píše zdroj. Cena za litr etanolu
+  Akční ceny platné k poslednímu snímku z akcniceny.cz
+  (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
+  celkem {{ offers | length }}. Produkt je uvedený tak, jak ho píše zdroj. Cena za litr etanolu
   je jen tam, kde zdroj uvádí obsah alkoholu.
 </p>
 

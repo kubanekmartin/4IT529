@@ -20,7 +20,7 @@ from lihoviny.llm import Llm
 log = logging.getLogger(__name__)
 
 
-class CollectorResult(TypedDict):
+class OdpovedSberu(TypedDict):
     """Obsah INFORM od sběrného agenta: jen souhrn, samotné nálezy jsou na tabuli."""
 
     snapshot_id: int

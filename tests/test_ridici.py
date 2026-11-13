@@ -1,7 +1,7 @@
 """Řídicí agent přes sběrnici: běh pošle Zadání sběrným agentům a hlídá jejich odpovědi.
 
 Sběrní agenti jsou tu náhražky se jmény `sberny-a` a `sberny-b`; skuteční se zapíšou
-do `Ridici.collectors`. Čas posouvá `FakeClock`, takže limit 30 minut se netestuje čekáním.
+do `Ridici.sberni_agenti`. Čas posouvá `FakeClock`, takže limit 30 minut se netestuje čekáním.
 Výsledek běhů (dokončen, varování) se kontroluje přes HTTP na stránce Běhy.
 """
 
@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from lihoviny.agent import Agent, CollectorResult
+from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.agents import AGENTS
 from lihoviny.agents.ridici import Ridici
 from lihoviny.bus import Kind
@@ -20,7 +20,7 @@ from lihoviny.web.app import create_app
 
 
 class RidiciSNahrazkami(Ridici):
-    collectors = ("sberny-a", "sberny-b")
+    sberni_agenti = ("sberny-a", "sberny-b")
 
 
 class RidiciSAnalytikem(RidiciSNahrazkami):
@@ -34,14 +34,14 @@ class SbernyA(Agent):
     role = "náhražka sběrného agenta"
 
     def handle_request(self, request):
-        return CollectorResult(snapshot_id=1, new_findings=2)
+        return OdpovedSberu(snapshot_id=1, new_findings=2)
 
 
 class SbernyB(SbernyA):
     name = "sberny-b"
 
 
-def start_manual_run(bus, content=None):
+def start_manual_beh(bus, content=None):
     return bus.send(
         kind=Kind.REQUEST, sender="clen-tymu", recipient="ridici", content=content or {}
     )
@@ -64,7 +64,7 @@ def new_zadani(bus, agent):
 
 
 def answer(bus, agent, new_findings=3):
-    """Sběrný agent vyzvedne Zadání a odpoví souhrnem podle kontraktu CollectorResult."""
+    """Sběrný agent vyzvedne Zadání a odpoví souhrnem podle kontraktu OdpovedSberu."""
     zadani = zadani_for(bus, agent)
     bus.reply(zadani, Kind.INFORM, {"snapshot_id": 1, "new_findings": new_findings})
     return zadani
@@ -96,36 +96,36 @@ def replies(bus, zadani):
 
 
 def test_ridici_is_registered_and_sends_zadani_only_to_registered_agents():
-    recipients = [*Ridici.collectors, *([Ridici.analyst] if Ridici.analyst else [])]
+    recipients = [*Ridici.sberni_agenti, *([Ridici.analyst] if Ridici.analyst else [])]
 
     assert AGENTS["ridici"] is Ridici
     assert [name for name in recipients if name not in AGENTS] == []
-    assert "ozvena" not in Ridici.collectors
-    assert set(Ridici.collectors) == {"cenovy", "sortimentni"}
+    assert "ozvena" not in Ridici.sberni_agenti
+    assert set(Ridici.sberni_agenti) == {"cenovy", "sortimentni"}
 
 
-def test_manual_run_sends_zadani_to_every_collector_and_answers_with_the_run(bus, make_agent):
-    request = start_manual_run(bus)
+def test_manual_beh_sends_zadani_to_every_sberny_agent_and_answers_with_the_beh(bus, make_agent):
+    request = start_manual_beh(bus)
 
     make_agent(RidiciSNahrazkami).process_pending()
 
     reply = bus.conversation(request.conversation_id)[-1]
     assert reply.kind is Kind.INFORM
     assert reply.content == {
-        "run_id": reply.content["run_id"],
-        "run": "collection",
+        "beh_id": reply.content["beh_id"],
+        "beh": "collection",
         "sent_to": ["sberny-a", "sberny-b"],
     }
-    for collector in ["sberny-a", "sberny-b"]:
-        zadani = zadani_for(bus, collector)
-        assert (zadani.sender, zadani.content) == ("ridici", {"run_id": reply.content["run_id"]})
+    for sberny in ["sberny-a", "sberny-b"]:
+        zadani = zadani_for(bus, sberny)
+        assert (zadani.sender, zadani.content) == ("ridici", {"beh_id": reply.content["beh_id"]})
 
 
-def test_silent_collector_gets_selhani_after_30_minutes_and_answering_one_does_not(
+def test_silent_sberny_agent_gets_selhani_after_30_minutes_and_answering_one_does_not(
     bus, clock, make_agent
 ):
     ridici = make_agent(RidiciSNahrazkami)
-    start_manual_run(bus)
+    start_manual_beh(bus)
     ridici.process_pending()
     answered = answer(bus, "sberny-a")
     silent = zadani_for(bus, "sberny-b")  # vyzvedl ho a spadl, odpověď nepřijde
@@ -153,7 +153,7 @@ def test_silent_collector_gets_selhani_after_30_minutes_and_answering_one_does_n
     ],
     ids=["zimni-cas", "letni-cas"],
 )
-def test_daily_run_sends_zadani_once_at_six_prague_time(bus, clock, make_agent):
+def test_daily_beh_sends_zadani_once_at_six_prague_time(bus, clock, make_agent):
     ridici = make_agent(RidiciSNahrazkami)
     ridici.on_idle()
     assert new_zadani(bus, "sberny-a") == []
@@ -162,11 +162,11 @@ def test_daily_run_sends_zadani_once_at_six_prague_time(bus, clock, make_agent):
     ridici.on_idle()
     ridici.on_idle()
 
-    for collector in ["sberny-a", "sberny-b"]:
-        assert [m.sent_at for m in new_zadani(bus, collector)] == [clock.now()]
+    for sberny in ["sberny-a", "sberny-b"]:
+        assert [m.sent_at for m in new_zadani(bus, sberny)] == [clock.now()]
 
 
-def test_daily_run_missed_while_ridici_was_down_still_runs_that_day_but_not_the_next(
+def test_daily_beh_missed_while_ridici_was_down_still_happens_that_day_but_not_the_next(
     bus, clock, make_agent
 ):
     clock.advance(hours=7)  # pondělí 14:00 v Praze, řídicí agent v 6:00 neběžel
@@ -200,9 +200,9 @@ def test_monday_brief_zadani_reaches_analyst_at_seven_with_results_of_the_collec
 
     [brief] = new_zadani(bus, "analyticky")
     assert brief.content == {
-        "run_id": brief.content["run_id"],
+        "beh_id": brief.content["beh_id"],
         "collection": {
-            "run_id": collection_zadani.content["run_id"],
+            "beh_id": collection_zadani.content["beh_id"],
             "results": {
                 "sberny-a": {"outcome": "INFORM", "new_findings": 0},
                 "sberny-b": {"outcome": "FAILURE", "reason": "HTTP 429"},
@@ -225,19 +225,19 @@ def test_no_brief_zadani_without_analyst_or_outside_monday(bus, ridici_class, ma
     assert new_zadani(bus, "analyticky") == []
 
 
-def test_manual_brief_run_sends_zadani_to_analyst(bus, make_agent):
-    request = start_manual_run(bus, {"run": "brief"})
+def test_manual_brief_beh_sends_zadani_to_analyst(bus, make_agent):
+    request = start_manual_beh(bus, {"beh": "brief"})
 
     make_agent(RidiciSAnalytikem).process_pending()
 
     reply = bus.conversation(request.conversation_id)[-1]
-    run_id = reply.content["run_id"]
+    beh_id = reply.content["beh_id"]
     assert (reply.kind, reply.content) == (
         Kind.INFORM,
-        {"run_id": run_id, "run": "brief", "sent_to": ["analyticky"]},
+        {"beh_id": beh_id, "beh": "brief", "sent_to": ["analyticky"]},
     )
     assert [m.content for m in new_zadani(bus, "analyticky")] == [
-        {"run_id": run_id, "collection": None}
+        {"beh_id": beh_id, "collection": None}
     ]
 
 
@@ -246,21 +246,21 @@ def test_manual_brief_run_sends_zadani_to_analyst(bus, make_agent):
     [
         (
             RidiciSNahrazkami,
-            {"run": "brief"},
+            {"beh": "brief"},
             "Brief nemá komu zadat: analytický agent zatím neexistuje",
         ),
         (
             RidiciSAnalytikem,
-            {"run": "inventura"},
+            {"beh": "inventura"},
             "neznámý běh 'inventura', znám collection a brief",
         ),
     ],
     ids=["brief-bez-analytickeho-agenta", "neznamy-beh"],
 )
-def test_manual_run_that_cannot_start_answers_with_selhani(
+def test_manual_beh_that_cannot_start_answers_with_selhani(
     bus, make_agent, ridici_class, content, reason
 ):
-    request = start_manual_run(bus, content)
+    request = start_manual_beh(bus, content)
 
     make_agent(ridici_class).process_pending()
 
@@ -269,11 +269,11 @@ def test_manual_run_that_cannot_start_answers_with_selhani(
     assert new_zadani(bus, "analyticky") == []
 
 
-def test_web_warns_about_collectors_that_found_nothing_or_failed_in_the_last_run(
+def test_web_warns_about_sberni_agenti_that_found_nothing_or_failed_in_the_last_beh(
     bus, clock, make_agent, web
 ):
     ridici = make_agent(RidiciSNahrazkami)
-    start_manual_run(bus)
+    start_manual_beh(bus)
     ridici.process_pending()
     answer(bus, "sberny-a", new_findings=0)
     zadani_for(bus, "sberny-b")  # mlčí
@@ -289,16 +289,16 @@ def test_web_warns_about_collectors_that_found_nothing_or_failed_in_the_last_run
     assert "<strong>sberny-b</strong> selhal: bez odpovědi do 30 minut" in warnings
 
 
-def test_web_warning_disappears_once_the_collector_succeeds_in_a_later_run(bus, make_agent, web):
+def test_web_warning_disappears_once_the_sberny_agent_succeeds_in_a_later_beh(bus, make_agent, web):
     ridici = make_agent(RidiciSNahrazkami)
-    start_manual_run(bus)
+    start_manual_beh(bus)
     ridici.process_pending()
     answer(bus, "sberny-a", new_findings=0)
     fail(bus, "sberny-b", "HTTP 429")
     ridici.process_pending()
     assert warnings_on(web.get("/behy")) != ""
 
-    start_manual_run(bus)
+    start_manual_beh(bus)
     ridici.process_pending()
     answer(bus, "sberny-a", new_findings=2)
     answer(bus, "sberny-b", new_findings=1)
@@ -307,9 +307,9 @@ def test_web_warning_disappears_once_the_collector_succeeds_in_a_later_run(bus, 
     assert warnings_on(web.get("/behy")) == ""
 
 
-def test_web_shows_run_in_progress_until_every_collector_answers(bus, make_agent, web):
+def test_web_shows_beh_in_progress_until_every_sberny_agent_answers(bus, make_agent, web):
     ridici = make_agent(RidiciSNahrazkami)
-    start_manual_run(bus)
+    start_manual_beh(bus)
     ridici.process_pending()
     answer(bus, "sberny-a", new_findings=1)
     ridici.process_pending()
@@ -328,11 +328,11 @@ def test_web_shows_run_in_progress_until_every_collector_answers(bus, make_agent
     assert "5 nových nálezů" in finished
 
 
-def test_web_says_so_when_no_run_has_happened_yet(web):
+def test_web_says_so_when_no_beh_has_happened_yet(web):
     assert "Zatím žádný běh" in web.get("/behy").text
 
 
-def test_running_ridici_starts_the_daily_run_by_itself_and_it_finishes_when_collectors_answer(
+def test_running_ridici_starts_the_daily_beh_by_itself_and_it_finishes_when_sberni_agenti_answer(
     make_agent, start_agent, web
 ):
     start_agent(make_agent(SbernyA))

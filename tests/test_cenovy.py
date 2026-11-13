@@ -1,8 +1,8 @@
 """Cenový agent přes sběrnici a tabuli nad uloženými ukázkami výpisů z akcniceny.cz.
 
 Ukázky v `tests/fixtures/akcniceny/` jsou skutečné stránky z 13. 11. 2026 zmenšené na pár
-produktů. `vypis-bez-akci.html` je skutečný výpis s odstraněnými produkty: dostanou ho výpisy,
-na kterých v daném testu nezáleží.
+produktů. `vypis-bez-akcnich-cen.html` je skutečný výpis s odstraněnými produkty: dostanou ho
+výpisy, na kterých v daném testu nezáleží.
 """
 
 from datetime import timedelta
@@ -17,7 +17,7 @@ from lihoviny.fetch import FakeFetcher, HttpFetcher
 
 FIXTURES = Path(__file__).parent / "fixtures" / "akcniceny"
 LISTING = "https://www.akcniceny.cz/zbozi/napoje-alkoholicke/{}/"
-# Výpisy podle klíčových slov, ze kterých cenový agent bere akce lihovin a RTD.
+# Výpisy podle klíčových slov, ze kterých cenový agent bere akční ceny lihovin a RTD.
 LISTINGS = [
     "tuzemak-rum",
     "vodky",
@@ -33,7 +33,7 @@ LISTINGS = [
 
 
 def source_routes():
-    routes = {LISTING.format(slug): FIXTURES / "vypis-bez-akci.html" for slug in LISTINGS}
+    routes = {LISTING.format(slug): FIXTURES / "vypis-bez-akcnich-cen.html" for slug in LISTINGS}
     routes |= {
         LISTING.format("tuzemak-rum"): FIXTURES / "tuzemak-rum.html",
         LISTING.format("tuzemak-rum") + "strana-2/": FIXTURES / "tuzemak-rum-strana-2.html",
@@ -138,7 +138,7 @@ def test_price_per_litre_of_ethanol_needs_known_abv(bus, board, clock, raw_dir, 
         428.43,
         None,
     )
-    # více druhů s různým obsahem alkoholu v jedné akci: obsah alkoholu neznáme
+    # více druhů s různým obsahem alkoholu v jedné akční ceně: obsah alkoholu neznáme
     heffron = (
         "Heffron Panama Original 5YO 35% Elixir Coconut 30% Heritage rum 5YO 38% "
         "Elixir Coffee 30% 0,5l"
@@ -312,8 +312,8 @@ def test_source_failure_after_three_attempts_becomes_failure_and_leaves_board_em
 def test_listings_without_any_offer_are_failure_not_zero_akcni_ceny(
     bus, board, clock, raw_dir, make_agent
 ):
-    # Kdyby zdroj změnil stránku a parser nic nenašel, nesmí to vypadat jako týden bez akcí.
-    routes = {LISTING.format(slug): FIXTURES / "vypis-bez-akci.html" for slug in LISTINGS}
+    # Kdyby zdroj změnil stránku a parser nic nenašel, nesmí to vypadat jako týden bez akčních cen.
+    routes = {LISTING.format(slug): FIXTURES / "vypis-bez-akcnich-cen.html" for slug in LISTINGS}
     cenovy = make_cenovy(make_agent, clock, raw_dir, routes)
     zadani = send_zadani(bus)
 

@@ -30,7 +30,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from lihoviny.agent import Agent, CollectorResult
+from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.board import Product
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchResult
@@ -97,8 +97,11 @@ class Listing:
 
 
 @dataclass
-class NewProduct:
-    """Produkt ze snímku, který na tabuli ještě není; všechny karty se stejným klíčem."""
+class UnrecordedProduct:
+    """Produkt ze snímku, který na tabuli ještě není; všechny karty se stejným klíčem.
+
+    Novinkou je jen někdy, podle pravidla v popisu modulu.
+    """
 
     listings: list[Listing]
     category: Category | None = None
@@ -151,8 +154,10 @@ class Sortimentni(Agent):
         in_snapshot: dict[str, list[Listing]] = {}
         for listing in listings:
             in_snapshot.setdefault(listing.key, []).append(listing)
-        new = [NewProduct(group) for key, group in in_snapshot.items() if key not in known]
-        self._describe(new, source_brands, list(known.values()))
+        unrecorded = [
+            UnrecordedProduct(group) for key, group in in_snapshot.items() if key not in known
+        ]
+        self._describe(unrecorded, source_brands, list(known.values()))
 
         previous = self.board.snapshots(agent=self.name)
         baseline = not previous
@@ -161,7 +166,7 @@ class Sortimentni(Agent):
             agent=self.name, source=SOURCE, fetches=[root, *pages], item_count=len(in_snapshot)
         )
         new_findings = 0
-        for product in new:
+        for product in unrecorded:
             stored = self._record_product(product, snapshot.id)
             # Výchozí snímek: jen štítek prodejce. Později: ID u zdroje novější než výchozí stav.
             is_novinka = product.labelled_new if baseline else product.first.source_id > watermark
@@ -173,16 +178,18 @@ class Sortimentni(Agent):
             "snímek %s: %s produktů, z toho %s nových, %s novinek",
             snapshot.id,
             len(in_snapshot),
-            len(new),
+            len(unrecorded),
             new_findings,
         )
-        return CollectorResult(snapshot_id=snapshot.id, new_findings=new_findings)
+        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=new_findings)
 
-    def _describe(self, new: list[NewProduct], source_brands: set[str], known) -> None:
+    def _describe(
+        self, unrecorded: list[UnrecordedProduct], source_brands: set[str], known
+    ) -> None:
         """Doplní novým produktům kategorii, značku a výrobce; LLM jen tam, kde zdroj nestačí."""
         brands = source_brands | {product.brand for product in known}
         unclear = []
-        for product in new:
+        for product in unrecorded:
             product.category = _source_category(product.listings)
             product.brand = _match_brand(product.first.name, brands)
             if product.category is None or product.brand is None:
@@ -191,13 +198,13 @@ class Sortimentni(Agent):
             self._classify(unclear)
 
         manufacturers = {product.brand: product.manufacturer for product in known}
-        unknown_brands = sorted({p.brand for p in new if p.brand not in manufacturers})
+        unknown_brands = sorted({p.brand for p in unrecorded if p.brand not in manufacturers})
         if unknown_brands:
             manufacturers |= self._ask_manufacturers(unknown_brands)
-        for product in new:
+        for product in unrecorded:
             product.manufacturer = manufacturers[product.brand]
 
-    def _classify(self, unclear: list[NewProduct]) -> None:
+    def _classify(self, unclear: list[UnrecordedProduct]) -> None:
         items = [
             {
                 "id": str(product.first.source_id),
@@ -242,7 +249,7 @@ class Sortimentni(Agent):
             raise LlmError(f"LLM neurčil výrobce značek {', '.join(missing)}")
         return found
 
-    def _record_product(self, product: NewProduct, snapshot_id: int) -> Product:
+    def _record_product(self, product: UnrecordedProduct, snapshot_id: int) -> Product:
         first = product.first
         return self.board.record_product(
             normalized_key=first.key,

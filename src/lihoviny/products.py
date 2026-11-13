@@ -3,7 +3,7 @@
 Klíč tvoří značka a název (tak, jak je zdroj uvádí za sebou), objem a obsah alkoholu.
 Z názvu se vynechá obsah alkoholu, slova o dárkovém balení a obalu, diakritika a velikost
 písmen, takže „Jägermeister 35 % obj. dárkové balení se 2 panáky“ 0,7 l je týž produkt
-jako „Jägermeister 35% obj.“ 0,7 l. Klíč používá sortimentní agent i párování akcí.
+jako „Jägermeister 35% obj.“ 0,7 l. Klíč používá sortimentní agent i párování akčních cen.
 """
 
 import re

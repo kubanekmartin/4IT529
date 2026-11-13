@@ -1,6 +1,6 @@
 """Cenový agent (KIQ 2 Promo ceny): akční ceny lihovin a RTD z akcniceny.cz.
 
-Na Zadání projde výpisy akcí podle klíčových slov (rum, vodka, gin, likéry, míchaný nápoj…)
+Na Zadání projde výpisy akčních cen podle klíčových slov (rum, vodka, gin, likéry, míchaný nápoj…)
 i s jejich dalšími stranami. Výpis ukazuje u každého produktu nabídky jednotlivých řetězců:
 cenu, případně cenu s věrnostní kartou, slevu, platnost a odkaz na leták. Každá nabídka je
 jedna akční cena. Snímek se zapíše při každém Zadání (surové stránky jsou na disku), nález jen
@@ -19,7 +19,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from urllib.parse import urljoin
 
-from lihoviny.agent import Agent, CollectorResult
+from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchResult
 
@@ -72,7 +72,7 @@ class Cenovy(Agent):
 
     def handle_request(self, request: Message) -> dict[str, Any]:
         pages: list[FetchResult] = []
-        # Tatáž akce bývá ve více výpisech (Jägermeister v likérech i bylinných destilátech).
+        # Tatáž akční cena bývá ve více výpisech (Jägermeister v likérech i bylinných destilátech).
         offers: dict[tuple, tuple[str, dict[str, Any]]] = {}
         for slug, category in LISTINGS:
             for offer in self._read_listing(LISTING_URL.format(slug), pages):
@@ -99,7 +99,7 @@ class Cenovy(Agent):
                 content=content,
             )
             new_findings += 1
-        return CollectorResult(snapshot_id=snapshot.id, new_findings=new_findings)
+        return OdpovedSberu(snapshot_id=snapshot.id, new_findings=new_findings)
 
     def _read_listing(self, url: str, pages: list[FetchResult]) -> list[Offer]:
         offers: list[Offer] = []
@@ -180,7 +180,7 @@ def volume_litres(product: str) -> Decimal | None:
 def abv_percent(product: str) -> Decimal | None:
     """Obsah alkoholu z názvu („37,5%“, „vol. 15%“), jinak None.
 
-    Více různých hodnot (například „35% … 38%“ u více druhů v jedné akci) nebo zápis
+    Více různých hodnot (například „35% … 38%“ u více druhů v jedné akční ceně) nebo zápis
     „40/37,5%“ znamená, že obsah alkoholu konkrétní láhve neznáme.
     """
     values = {Decimal(v.replace(",", ".")) for v in _ABV.findall(product)}
@@ -216,7 +216,7 @@ def _finding_content(offer: Offer, category: str) -> dict[str, Any]:
 def _offer_key(source_url: str, content: dict[str, Any]) -> tuple:
     """Akční cena je táž, když se shoduje produkt, řetězec, ceny a konec platnosti.
 
-    Začátek platnosti do klíče nepatří: zdroj ho uvádí jen u akcí, které ještě nezačaly.
+    Začátek platnosti do klíče nepatří: zdroj ho uvádí jen u akčních cen, které ještě neplatí.
     """
     return (
         source_url,
