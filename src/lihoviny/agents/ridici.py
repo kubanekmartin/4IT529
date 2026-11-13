@@ -165,7 +165,11 @@ class Ridici(Agent):
 
     def _take_dotaz(self, dotaz: Message) -> None:
         """Dotaz → Zadání z Dotazu. Na Dotaz odpoví, až odpoví sběrný agent (nebo mu vyprší
-        termín). Dotaz, ze kterého Zadání vzniknout nemůže, hned odmítne Selháním s důvodem."""
+        termín). Dotaz, ze kterého Zadání vzniknout nemůže, hned odmítne Selháním s důvodem.
+
+        Převod Dotazu volá LLM, takže před každým Dotazem uzavře Zadání po termínu: jinak by
+        na ně kolo Dotazů čekalo až do `on_idle` po posledním Dotazu."""
+        self._fail_overdue()
         try:
             self._send_zadani_from_dotaz(dotaz)
             return
@@ -194,6 +198,9 @@ class Ridici(Agent):
         )
         if asking is None:
             raise DotazError("Dotaz nepatří k žádnému Zadání, na které by tazatel odpovídal")
+        deadline = asking.deadline - FINISH_TIME
+        if deadline <= self.clock.now():
+            raise DotazError("na doplňující sběr už nezbývá čas, Brief se musí dopsat")
         earlier = [z for z in in_conversation if z.dotaz_id is not None]
         if any(z.outcome is not None for z in earlier):
             raise DotazError("jen jedno kolo Dotazů na běh: na předchozí Dotazy už přišla odpověď")
@@ -201,14 +208,13 @@ class Ridici(Agent):
             raise DotazError(f"nejvýš {MAX_DOTAZY} Dotazy na běh")
         if any(z.agent == agent for z in self.board.zadani(asking.beh_id)):
             raise DotazError(f"KIQ {kiq}: {agent} už v tomto běhu Zadání dostal")
-        deadline = asking.deadline - FINISH_TIME
-        if deadline <= self.clock.now():
-            raise DotazError("na doplňující sběr už nezbývá čas, Brief se musí dopsat")
         text = self.llm.ask(
             _dotaz_prompt(dotaz, agent), ZadaniZDotazu, effort="low", system=_DOTAZ_SYSTEM
         )
         if not text.instruction.strip():
             raise DotazError("LLM z Dotazu nenapsal žádné Zadání")
+        if deadline <= self.clock.now():  # převod trval tak dlouho, že termín mezitím minul
+            raise DotazError("na doplňující sběr už nezbývá čas, Brief se musí dopsat")
         with self.transaction():
             self.board.add_zadani(
                 beh_id=asking.beh_id,

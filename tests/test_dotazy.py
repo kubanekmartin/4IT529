@@ -229,6 +229,46 @@ def test_analyst_asks_at_most_three_dotazy_in_a_single_round(bus, board, clock, 
     assert "<strong>KIQ 4</strong> (regulatorni): HTTP 503</li>" in gaps
 
 
+class SlowLlm(FakeLlm):
+    """Náhražka LLM, jejíž každé volání trvá 8 minut času `clock`."""
+
+    def __init__(self, clock, *answers):
+        super().__init__(*answers)
+        self.clock = clock
+
+    def ask(self, prompt, schema, *, effort, system=""):
+        self.clock.advance(minutes=8)
+        return super().ask(prompt, schema, effort=effort, system=system)
+
+
+def test_slow_dotaz_conversion_still_keeps_the_15_minute_deadline_between_dotazy(
+    bus, board, clock, make_agent
+):
+    # Zadání Briefu v 7:00, Zadání z Dotazu musí skončit v 7:15. Převod prvního Dotazu skončí
+    # v 7:08, druhého až v 7:16: na ten už je pozdě. Před třetím Dotazem řídicí agent uzavře
+    # Selháním Zadání z prvního, které sběrný agent nestihl, a třetí odmítne bez volání LLM.
+    llm = SlowLlm(clock, *[ZADANI_Z_DOTAZU] * 3)
+    ridici = make_agent(Ridici, llm=llm)
+    failed = dict.fromkeys(SBERNI_AGENTI, "HTTP 503")
+    brief = monday_brief(bus, board, clock, ridici, failed=failed)
+    make_agent(Analyticky).process_pending()
+
+    ridici.process_pending()
+
+    assert len(llm.calls) == 2
+    assert new_zadani(bus, "cenovy") == []  # na druhý Dotaz Zadání nevzniklo
+    answers = [
+        (m.kind, m.content.get("reason"))
+        for m in bus.conversation(brief.conversation_id)
+        if m.sender == "ridici" and m.recipient == "analyticky" and "dotaz_id" in m.content
+    ]
+    assert answers == [
+        (Kind.FAILURE, "na doplňující sběr už nezbývá čas, Brief se musí dopsat"),
+        (Kind.FAILURE, "bez odpovědi do 15 minut od Zadání Briefu"),
+        (Kind.FAILURE, "na doplňující sběr už nezbývá čas, Brief se musí dopsat"),
+    ]
+
+
 def ask(bus, ridici, request, kiq):
     """Test hraje analytického agenta: pošle Dotaz v konverzaci Zadání Briefu."""
     dotaz = bus.send(

@@ -189,9 +189,14 @@ i s důvodem.
 
 - Nejvýš 3 Dotazy na běh (jeden za KIQ, podle čísla KIQ) a jedno kolo: po první odpovědi
   řídicí agent další Dotaz odmítne Selháním. Sběr, který ještě neodpověděl, se nezadává znovu.
-- Časový rozpočet: 30 minut na Zadání Briefu platí i s Dotazy. Zadání z Dotazu musí odpovědět
-  do 15 minut od Zadání Briefu (jinak Selhání „bez odpovědi do 15 minut od Zadání Briefu“),
-  takže na napsání Briefu zbude 15 minut a jedno volání LLM trvá nejvýš 12.
+- Časový rozpočet (`src/lihoviny/planning.py`): 30 minut na Zadání Briefu platí i s Dotazy.
+  Převod Dotazu na Zadání trvá nejvýš 2 minuty (60 s, jedno opakování). Zadání z Dotazu musí
+  odpovědět do 15 minut od Zadání Briefu (jinak Selhání „bez odpovědi do 15 minut od Zadání
+  Briefu“), takže na napsání Briefu zbude 15 minut a jedno volání LLM trvá nejvýš 12. Termíny
+  řídicí agent kontroluje i mezi Dotazy a Dotaz, na který už čas nezbývá, odmítne.
+- Sběrný agent obsluhuje zprávy jednu po druhé: když ještě pracuje na dřívějším Zadání (třeba
+  na sběru, kterému už vypršel termín), Zadání z Dotazu čeká ve frontě a po 15 minutách
+  skončí Selháním. Brief pak mezeru uvede; nic se neblokuje.
 - Celá výměna má ID konverzace Zadání Briefu, takže ji <http://127.0.0.1:8510/log> ukáže
   pohromadě; Zadání z Dotazu jsou na stránce Běhy v běhu Briefu s označením „z Dotazu“.
 - Ruční Zadání poslané analytickému agentovi přímo (ne přes `ridici`) vyjde bez Dotazů.
