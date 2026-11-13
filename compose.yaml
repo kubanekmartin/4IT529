@@ -72,12 +72,32 @@ services:
     volumes:
       - rawdata:/data/raw
 
+  # Rozvrh běhů (denní sběr 6:00, Brief v pondělí 7:00, pražský čas) a Selhání po 30 min.
+  # Ruční běh: docker compose exec ridici lihoviny zadani ridici
+  ridici:
+    <<: *app
+    command: ["lihoviny", "agent", "ridici"]
+    environment:
+      <<: *agent-env
+
+  # KIQ 1: produkty a Novinky z kategorie Lihoviny na rohlik.cz.
+  # Ruční běh: docker compose exec sortimentni lihoviny zadani sortimentni --cekat 600
   sortimentni:
     <<: *app
     command: ["lihoviny", "agent", "sortimentni"]
     environment:
       <<: *agent-env
       LLM_MODEL_SORTIMENTNI: ${LLM_MODEL_SORTIMENTNI:-}
+    volumes:
+      - rawdata:/data/raw
+
+  # KIQ 2: akční ceny lihovin a RTD z akcniceny.cz.
+  # Ruční běh: docker compose exec cenovy lihoviny zadani cenovy --cekat 180
+  cenovy:
+    <<: *app
+    command: ["lihoviny", "agent", "cenovy"]
+    environment:
+      <<: *agent-env
     volumes:
       - rawdata:/data/raw
 

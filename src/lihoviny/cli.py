@@ -4,6 +4,7 @@ lihoviny migrate                          aplikuje migrace, nastaví roli webu
 lihoviny agent ozvena                     spustí agenta (služba)
 lihoviny web                              spustí web
 lihoviny zadani ozvena '{"text": "ahoj"}' pošle Zadání a vypíše odpověď
+lihoviny overit-llm [--agent analyticky]  jedno skutečné volání LLM (ověření klíče a modelu)
 """
 
 import argparse
@@ -14,13 +15,16 @@ import sys
 import time
 from pathlib import Path
 
+import anthropic
+from pydantic import BaseModel
+
 from lihoviny.agent import Agent
 from lihoviny.agents import AGENTS
 from lihoviny.board import Board
 from lihoviny.bus import Bus, Kind, Message
 from lihoviny.clock import SystemClock
 from lihoviny.fetch import HttpFetcher
-from lihoviny.llm import ClaudeLlm
+from lihoviny.llm import ClaudeLlm, LlmError
 from lihoviny.migrations import migrate
 
 TEAM_MEMBER = "clen-tymu"
@@ -45,6 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     zadani.add_argument("content", nargs="?", default="{}", help="obsah jako objekt JSON")
     zadani.add_argument("--cekat", type=float, default=30.0, help="kolik sekund čekat na odpověď")
 
+    llm_check = commands.add_parser("overit-llm", help="jedno skutečné volání LLM")
+    llm_check.add_argument("--agent", default="ozvena", help="čí model použít (LLM_MODEL_<AGENT>)")
+
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -59,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_web(args.host, args.port)
         case "zadani":
             return send_zadani(args.recipient, args.content, wait=args.cekat)
+        case "overit-llm":
+            return check_llm(ClaudeLlm.for_agent(args.agent))
     return 2
 
 
@@ -118,6 +127,26 @@ def send_zadani(recipient: str, content_json: str, *, wait: float) -> int:
         time.sleep(0.2)
     print(f"bez odpovědi do {wait:g} s (běží agent {recipient}?)", file=sys.stderr)
     return 2
+
+
+class _LlmCheckAnswer(BaseModel):
+    odpoved: str
+
+
+def check_llm(llm: ClaudeLlm) -> int:
+    """Jedno malé strukturované volání: ověří klíč, model i strukturovaný výstup."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("chybí ANTHROPIC_API_KEY (na serveru v .env, viz deploy/)", file=sys.stderr)
+        return 1
+    try:
+        answer = llm.ask(
+            "Které město je hlavní město České republiky? Odpověz jen názvem.", _LlmCheckAnswer
+        )
+    except (anthropic.AnthropicError, LlmError) as error:
+        print(f"LLM neodpovídá ({llm.model}): {error}", file=sys.stderr)
+        return 1
+    print(f"LLM odpovídá ({llm.model}): {answer.odpoved}")
+    return 0
 
 
 def _print(message: Message) -> None:

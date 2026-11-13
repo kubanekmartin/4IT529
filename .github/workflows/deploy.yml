@@ -1,0 +1,67 @@
+name: Nasazení
+
+# Po zeleném CI na main nasadí commit na https://lihoviny.kubanekmartin.cz. Server nepotřebuje
+# přístup na GitHub: workflow pošle `git archive` commitu přes SSH nasazovacímu skriptu
+# (deploy/lihoviny-deploy), který je jediné, co klíč DEPLOY_SSH_KEY na serveru smí spustit.
+# Ručně (workflow_dispatch) jde znovu nasadit aktuální main.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: lihoviny.kubanekmartin.cz
+  DEPLOY_USER: lihoviny-deploy
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: SSH klíč a otisk serveru
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Nasazení přes SSH
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "Nasazuji $sha"
+          git archive --format=tar.gz "$sha" |
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+              "$DEPLOY_USER@$DEPLOY_HOST" deploy "$sha"
+
+      - name: Ověření zvenku
+        run: |
+          headers=$(curl -fsS -D - -o /dev/null --retry 5 --retry-all-errors \
+            "https://$DEPLOY_HOST/log")
+          echo "$headers"
+          grep -qi '^x-robots-tag: .*noindex' <<<"$headers"
+          echo "Nasazeno: https://$DEPLOY_HOST/log" >> "$GITHUB_STEP_SUMMARY"
