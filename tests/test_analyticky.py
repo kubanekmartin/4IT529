@@ -74,7 +74,8 @@ def record_novinka(board, *, name, brand, manufacturer, category="rum_tuzemak", 
 
 
 def record_akcni_ceny(board, *offers):
-    """Snímek cenového agenta s akčními cenami `(produkt, řetězec, cena, sleva %, Kč/l etanolu)`."""
+    """Snímek cenového agenta s akčními cenami
+    `(produkt, řetězec, cena, o kolik % pod běžnou cenou, Kč/l etanolu)`."""
     snapshot = board.record_snapshot(
         agent="cenovy", source="akcniceny.cz", fetches=[], item_count=len(offers)
     )
@@ -276,7 +277,7 @@ def test_watched_competitors_come_first_and_other_manufacturers_only_as_unusual_
     assert "Jägermeister" not in promo
     assert "Tesco zlevnilo Jägermeister o 40 %." in section(html, "Netypické nálezy")
     prompt = llm.calls[0].prompt
-    assert "Fernet Stock 0,5l, BILLA, 169,90 Kč, sleva 30 %" in prompt
+    assert "Fernet Stock 0,5l, BILLA, 169,90 Kč, o 30 % pod běžnou cenou" in prompt
     assert "výrobce Stock (sledovaný konkurent)" in prompt
     assert "výrobce Mast-Jägermeister\n" in prompt
     # Sledovaný konkurent je v zadání pro LLM před ostatními, i s menší slevou.
