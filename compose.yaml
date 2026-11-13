@@ -72,6 +72,14 @@ services:
     volumes:
       - rawdata:/data/raw
 
+  cenovy:
+    <<: *app
+    command: ["lihoviny", "agent", "cenovy"]
+    environment:
+      <<: *agent-env
+    volumes:
+      - rawdata:/data/raw
+
 volumes:
   pgdata:
   rawdata:
