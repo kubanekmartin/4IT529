@@ -13,3 +13,7 @@ Každý ze šesti agentů (řídicí, čtyři sběrní, analytický) běží ve 
 - Postgres je jediný bod selhání: když neběží, nekomunikuje nikdo. Pro prototyp přijatelné.
 - Log komunikace na webu je přímo tabulka zpráv, nic se nesynchronizuje.
 - Výpadek jednoho agenta ostatní nezastaví; řídicí agent po 30 minutách bez odpovědi zapíše Selhání a Brief mezeru přizná.
+
+## Upřesnění (listopad 2026)
+
+Druh INFORM není „Nález“, jak říká první odstavec, ale odpověď s výsledkem (tak ho popisuje i spec #15). Sběrný agent v něm posílá jen přehled: snímek, počet nových nálezů a počet položek ve snímku. Samotné nálezy zapisuje na sdílenou tabuli, odkud je čte analytický agent a web.

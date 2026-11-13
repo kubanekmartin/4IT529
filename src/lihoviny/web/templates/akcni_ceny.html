@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Akční ceny{% endblock %}
+
+{% block head %}
+<style>
+  /* Osm sloupců se do běžné šířky stránky nevejde; tabulka dostane víc místa. */
+  main { max-width: 80rem; }
+  .offers { width: 100%; border-collapse: collapse; background: var(--surface); }
+  .offers th, .offers td {
+    padding: .5rem .6rem; border-bottom: 1px solid var(--border);
+    text-align: left; vertical-align: top;
+  }
+  .offers th { font-size: .8rem; color: var(--muted); font-weight: 600; }
+  .offers .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .offers .validity, .offers .chain { white-space: nowrap; }
+  .offers .product a { color: var(--text); font-weight: 600; }
+  .offers .price { font-weight: 700; color: var(--accent); }
+  .offers .note { display: block; font-size: .8rem; color: var(--muted); font-weight: 400; }
+  .offers .ethanol { font-weight: 700; }
+  .source { font-size: .875rem; }
+
+  /* Na úzkém displeji je každá akční cena kartička: řádek tabulky se poskládá pod sebe. */
+  @media (max-width: 47.99rem) {
+    .offers, .offers tbody, .offers tr, .offers td { display: block; }
+    .offers thead { display: none; }
+    .offers { background: none; }
+    .offers tr {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      padding: .5rem .75rem; margin-bottom: .75rem;
+    }
+    .offers td {
+      display: flex; justify-content: space-between; gap: 1rem;
+      padding: .2rem 0; border: 0; text-align: right;
+    }
+    .offers td::before { content: attr(data-label); color: var(--muted); text-align: left; }
+    .offers td.product { display: block; text-align: left; padding-bottom: .4rem; }
+    .offers td.product::before { content: none; }
+    .offers .num { white-space: normal; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Akční ceny lihovin a RTD</h1>
+
+{% if snapshot %}
+<p class="muted">
+  Akční ceny platné k poslednímu snímku z akcniceny.cz
+  (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
+  celkem {{ offers | length }}. Produkt je uvedený tak, jak ho píše zdroj. Cena za litr etanolu
+  je jen tam, kde zdroj uvádí obsah alkoholu.
+</p>
+
+<table class="offers">
+  <thead>
+    <tr>
+      <th scope="col">Produkt</th>
+      <th scope="col">Řetězec</th>
+      <th scope="col" class="num">Akční cena</th>
+      <th scope="col">Platnost</th>
+      <th scope="col" class="num">Objem</th>
+      <th scope="col" class="num">Alkohol</th>
+      <th scope="col" class="num">Kč za litr</th>
+      <th scope="col" class="num">Kč za litr etanolu</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for offer in offers %}
+    {% set c = offer.content %}
+    <tr>
+      <td class="product"><a href="{{ offer.source_url }}" rel="noopener">{{ c.product }}</a></td>
+      <td data-label="Řetězec" class="chain">{% if c.flyer_url %}<a href="{{ c.flyer_url }}" rel="noopener" title="Leták">{{ c.chain }}</a>{% else %}{{ c.chain }}{% endif %}</td>
+      <td data-label="Akční cena" class="num">
+        <span>
+          <span class="price">{{ c.price | cislo }} Kč</span>{% if c.discount_percent %} <span class="muted">−{{ c.discount_percent }} %</span>{% endif %}
+          {% if c.card_price is not none %}<span class="note">{{ c.card_label }}: {{ c.card_price | cislo }} Kč</span>{% endif %}
+        </span>
+      </td>
+      <td data-label="Platnost" class="validity">{{ c | platnost }}</td>
+      <td data-label="Objem" class="num">{% if c.volume_l %}{{ c.volume_l | kratce }} l{% else %}—{% endif %}</td>
+      <td data-label="Alkohol" class="num">{% if c.abv_percent %}{{ c.abv_percent | kratce }} %{% else %}—{% endif %}</td>
+      <td data-label="Kč za litr" class="num">{{ c.price_per_l | cislo }}</td>
+      <td data-label="Kč za litr etanolu" class="num ethanol">{{ c.price_per_l_ethanol | cislo }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p class="source muted">
+  Zdroj: <a href="https://www.akcniceny.cz/">akcniceny.cz</a>; podmínky zdroje dovolují jen
+  interní nekomerční použití (studijní prototyp).
+</p>
+{% else %}
+<p>Cenový agent zatím nezachytil žádné akční ceny.</p>
+{% endif %}
+{% endblock %}

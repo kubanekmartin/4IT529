@@ -1,0 +1,5 @@
+# Do image jde jen kód a zámek závislostí.
+*
+!pyproject.toml
+!uv.lock
+!src

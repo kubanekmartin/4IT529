@@ -1,0 +1,42 @@
+[project]
+name = "lihoviny"
+version = "0.1.0"
+description = "Multiagentní systém pro konkurenční zpravodajství na trhu lihovin (studijní prototyp)"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=2.8",
+    "fastapi>=0.162",
+    "httpx2>=2.16",
+    "jinja2>=3.1",
+    "psycopg[binary]>=3.3",
+    "pydantic>=2.14",
+    "tzdata>=2026.6",
+    "uvicorn>=0.54",
+]
+
+[project.scripts]
+lihoviny = "lihoviny.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2",
+    "ruff>=0.17",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lihoviny"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

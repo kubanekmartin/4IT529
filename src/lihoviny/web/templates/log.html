@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Log komunikace{% endblock %}
+
+{% block head %}
+<style>
+  .messages { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+  .message {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--kind-color); border-radius: 6px; padding: .75rem 1rem;
+  }
+  .message.REQUEST { --kind-color: var(--request); }
+  .message.INFORM { --kind-color: var(--inform); }
+  .message.QUERY { --kind-color: var(--query); }
+  .message.FAILURE { --kind-color: var(--failure); }
+  .meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: baseline; }
+  .kind { font-weight: 700; color: var(--kind-color); }
+  .route { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .details { font-size: .875rem; }
+  pre {
+    margin: .5rem 0 0; padding: .5rem; overflow-x: auto; border-radius: 4px;
+    background: var(--bg); font-size: .875rem; white-space: pre-wrap; word-break: break-word;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Log komunikace agentů</h1>
+<p class="muted">Každá zpráva mezi agenty, nejnovější nahoře (posledních 200).</p>
+
+{% if messages %}
+<ol class="messages">
+  {% for message in messages %}
+  <li class="message {{ message.kind }}">
+    <div class="meta">
+      <span class="kind" title="{{ message.kind }}">{{ kind_labels[message.kind] }}</span>
+      <span class="route">{{ message.sender }} → {{ message.recipient }}</span>
+      <time datetime="{{ message.sent_at.isoformat() }}">{{ message.sent_at | cas }}</time>
+    </div>
+    <div class="details muted">
+      {{ message.kind }} · konverzace <code>{{ message.conversation_id | string | truncate(8, True, "") }}</code>
+      · {% if message.claimed_at %}vyzvednuto {{ message.claimed_at | cas }}{% else %}nevyzvednuto{% endif %}
+    </div>
+    <pre>{{ message.content | json }}</pre>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p>Zatím žádné zprávy.</p>
+{% endif %}
+{% endblock %}

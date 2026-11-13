@@ -1,0 +1,105 @@
+# Celý systém: `cp .env.example .env`, doplnit hesla, pak `docker compose up --build`.
+# Ven jde jen port webu, a to jen na 127.0.0.1; na serveru před ním stojí hostitelský nginx.
+# Postgres port na hostiteli nemá: `docker compose exec db psql -U lihoviny`.
+#
+# Nový agent = kopie služby `ozvena` s jiným jménem v `command`
+# (a případně `LLM_MODEL_<AGENT>` v jeho `environment`).
+
+# Image staví jen služba `migrate`; ostatní ho jen používají (stejný tag by se jinak
+# stavěl vícekrát najednou a sestavení by spadlo).
+x-app: &app
+  image: lihoviny:${IMAGE_TAG:-local}
+  pull_policy: never
+  init: true
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+x-database-url: &database-url
+  DATABASE_URL: postgresql://${POSTGRES_USER:-lihoviny}:${POSTGRES_PASSWORD:?doplň POSTGRES_PASSWORD v .env}@db:5432/${POSTGRES_DB:-lihoviny}
+
+x-agent-env: &agent-env
+  <<: *database-url
+  RAW_DATA_DIR: /data/raw
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-}
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lihoviny}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?doplň POSTGRES_PASSWORD v .env}
+      POSTGRES_DB: ${POSTGRES_DB:-lihoviny}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *app
+    build: .
+    pull_policy: build
+    command: ["lihoviny", "migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *database-url
+      WEB_DB_USER: ${WEB_DB_USER:-lihoviny_web}
+      WEB_DB_PASSWORD: ${WEB_DB_PASSWORD:?doplň WEB_DB_PASSWORD v .env}
+
+  web:
+    <<: *app
+    command: ["lihoviny", "web", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      WEB_DATABASE_URL: postgresql://${WEB_DB_USER:-lihoviny_web}:${WEB_DB_PASSWORD:?doplň WEB_DB_PASSWORD v .env}@db:5432/${POSTGRES_DB:-lihoviny}
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8510}:8000"
+
+  ozvena:
+    <<: *app
+    command: ["lihoviny", "agent", "ozvena"]
+    environment:
+      <<: *agent-env
+    volumes:
+      - rawdata:/data/raw
+
+  # Rozvrh běhů (denní sběr 6:00, Brief v pondělí 7:00, pražský čas) a Selhání po 30 min.
+  # Ruční běh: docker compose exec ridici lihoviny zadani ridici
+  ridici:
+    <<: *app
+    command: ["lihoviny", "agent", "ridici"]
+    environment:
+      <<: *agent-env
+
+  # KIQ 1: produkty a Novinky z kategorie Lihoviny na rohlik.cz.
+  # Ruční běh: docker compose exec sortimentni lihoviny zadani sortimentni --cekat 600
+  sortimentni:
+    <<: *app
+    command: ["lihoviny", "agent", "sortimentni"]
+    environment:
+      <<: *agent-env
+      LLM_MODEL_SORTIMENTNI: ${LLM_MODEL_SORTIMENTNI:-}
+    volumes:
+      - rawdata:/data/raw
+
+  # KIQ 2: akční ceny lihovin a RTD z akcniceny.cz.
+  # Ruční běh: docker compose exec cenovy lihoviny zadani cenovy --cekat 180
+  cenovy:
+    <<: *app
+    command: ["lihoviny", "agent", "cenovy"]
+    environment:
+      <<: *agent-env
+    volumes:
+      - rawdata:/data/raw
+
+volumes:
+  pgdata:
+  rawdata:

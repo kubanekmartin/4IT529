@@ -1,0 +1,21 @@
+# Postgres jen pro testy. Pevný název projektu, takže ho sdílí všechny worktrees:
+#   docker compose -f compose.test.yaml up -d
+# Každý test si v něm založí vlastní databázi s náhodným jménem a po sobě ji smaže.
+name: lihoviny-test
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      # Jen pro lokální testy na 127.0.0.1, data jsou v paměti a po zastavení zmizí.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command: ["postgres", "-c", "fsync=off", "-c", "max_connections=300"]
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

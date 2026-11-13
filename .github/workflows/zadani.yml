@@ -1,0 +1,77 @@
+name: Ruční Zadání
+
+# Pošle Zadání agentovi na serveru jménem člena týmu (`lihoviny zadani`) a vypíše odpověď.
+# Zadání i odpověď jsou pak v logu komunikace na https://lihoviny.kubanekmartin.cz/log.
+# Příklad: příjemce `ozvena`, obsah {"text": "ahoj"}. Ruční běh: příjemce `ridici`, obsah {}
+# (denní sběr) nebo {"beh": "brief"} (Brief).
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: Příjemce Zadání (jméno agenta)
+        type: string
+        required: true
+        default: ozvena
+      content:
+        description: Obsah Zadání (objekt JSON)
+        type: string
+        required: true
+        default: '{"text": "ahoj z GitHub Actions"}'
+      wait:
+        description: Kolik sekund čekat na odpověď (0-3600)
+        type: number
+        required: true
+        default: 60
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_HOST: lihoviny.kubanekmartin.cz
+  DEPLOY_USER: lihoviny-deploy
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  zadani:
+    runs-on: ubuntu-24.04
+    # Stejný klíč jako nasazení (= root na VM): secrets z prostředí `produkce`.
+    environment: produkce
+    timeout-minutes: 65
+    steps:
+      - name: SSH klíč a otisk serveru
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Zadání a odpověď
+        env:
+          RECIPIENT: ${{ inputs.recipient }}
+          CONTENT: ${{ inputs.content }}
+          WAIT: ${{ inputs.wait }}
+        run: |
+          [[ $RECIPIENT =~ ^[a-z][a-z0-9-]{0,39}$ ]] || { echo "neplatný příjemce" >&2; exit 1; }
+          [[ $WAIT =~ ^[0-9]+$ ]] || { echo "čekat musí být celé číslo" >&2; exit 1; }
+          # Exit kód jako `lihoviny zadani`: 0 INFORM, 1 FAILURE, 2 bez odpovědi.
+          set +e
+          printf '%s' "$CONTENT" |
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+              "$DEPLOY_USER@$DEPLOY_HOST" zadani "$RECIPIENT" "$WAIT" | tee reply.txt
+          status=${PIPESTATUS[1]}
+          set -e
+          {
+            echo '```'
+            cat reply.txt
+            echo '```'
+            echo "Log komunikace: https://$DEPLOY_HOST/log"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
