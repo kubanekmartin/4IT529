@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Vloží ANTHROPIC_API_KEY do /srv/lihoviny/.env a restartuje služby, aby ho agenti dostali.
+# Klíč se čte skrytě z terminálu: nejde přes argumenty příkazů ani do historie shellu.
+#
+#   ssh -t ubuntu@130.61.26.171 sudo lihoviny-set-api-key
+#
+# Na server ho instaluje deploy/setup-server.sh do /usr/local/sbin/.
+set -euo pipefail
+
+ENV_FILE=/srv/lihoviny/.env
+DEPLOY_USER=lihoviny-deploy
+
+die() {
+    printf 'chyba: %s\n' "$*" >&2
+    exit 1
+}
+
+[[ $EUID -eq 0 ]] || die "spusť přes sudo"
+[[ -t 0 ]] || die "potřebuje terminál: ssh -t ... sudo lihoviny-set-api-key"
+[[ -f $ENV_FILE ]] || die "$ENV_FILE neexistuje (nejdřív setup-server.sh app)"
+
+IFS= read -r -s -p "ANTHROPIC_API_KEY (vstup se nezobrazuje): " key
+echo
+[[ $key =~ ^sk-ant-[A-Za-z0-9_-]+$ ]] || die "tohle nevypadá jako klíč Claude API (sk-ant-...)"
+
+# Jen vestavěné příkazy bashe (read, printf), takže se klíč neobjeví v seznamu procesů.
+tmp=$(mktemp "$ENV_FILE.XXXXXX")
+found=0
+while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line == ANTHROPIC_API_KEY=* ]]; then
+        printf 'ANTHROPIC_API_KEY=%s\n' "$key"
+        found=1
+    else
+        printf '%s\n' "$line"
+    fi
+done <"$ENV_FILE" >"$tmp"
+((found)) || printf 'ANTHROPIC_API_KEY=%s\n' "$key" >>"$tmp"
+unset key
+chown --reference="$ENV_FILE" "$tmp"
+chmod 600 "$tmp"
+mv "$tmp" "$ENV_FILE"
+echo "klíč uložen do $ENV_FILE (práva 600); restartuji služby"
+
+sudo -u "$DEPLOY_USER" /usr/local/bin/lihoviny-deploy up
+echo "hotovo. Ověření jedním voláním LLM:"
+echo "  ssh ubuntu@130.61.26.171 sudo -u $DEPLOY_USER lihoviny-deploy overit-llm"
