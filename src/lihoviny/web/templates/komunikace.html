@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Komunikace{% endblock %}
+
+{% block head %}
+<style>
+  .items { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+  .item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .75rem .9rem; overflow-wrap: anywhere;
+  }
+  .item h2 { font-size: 1.05rem; line-height: 1.35; margin: 0; }
+  .item h2 a { color: var(--text); }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: .1rem .9rem; margin-top: .2rem;
+    font-size: .875rem; color: var(--muted);
+  }
+  .tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+  .tag {
+    padding: 0 .5rem; border-radius: 999px; border: 1px solid var(--border);
+    font-size: .8rem; white-space: nowrap;
+  }
+  .tag.channel { border-color: var(--accent); color: var(--accent); }
+  .summary { margin: .45rem 0 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Komunikace</h1>
+<p class="muted">
+  KIQ 3: články o lihovinách z oborového magazínu zboziaprodej.cz s výrobcem, značkou, kanálem
+  komunikace, tématem a shrnutím. Články bez vztahu k lihovinám agent vynechá.
+  {% if last_snapshot %}
+  Poslední snímek {{ last_snapshot.taken_at | cas }} ({{ last_snapshot.item_count }} článků ve výpisu).
+  {% endif %}
+</p>
+
+{% if clanky %}
+<ol class="items">
+  {% for clanek in clanky %}
+  {% set c = clanek.content %}
+  <li class="item">
+    <h2><a href="{{ clanek.source_url }}" rel="noreferrer">{{ c.title or "Článek bez titulku" }}</a></h2>
+    <div class="meta">
+      <time datetime="{{ clanek.published_at.isoformat() }}">{{ clanek.published_at | datum }}</time>
+      {% if c.manufacturers or c.brands %}
+      <span>{{ c.manufacturers | join(", ") }}{% if c.manufacturers and c.brands %} · {% endif %}{{ c.brands | join(", ") }}</span>
+      {% endif %}
+    </div>
+    <div class="tags">
+      <span class="tag channel" title="Kanál">{{ channels.get(c.channel, c.channel) }}</span>
+      <span class="tag" title="Téma">{{ topics.get(c.topic, c.topic) }}</span>
+    </div>
+    <p class="summary">{{ c.summary }}</p>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p>Zatím žádné články o lihovinách.</p>
+{% endif %}
+{% endblock %}

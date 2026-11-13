@@ -2,7 +2,8 @@
 
 Sběrný agent po stažení zdroje zapíše jeden snímek (odkazuje na surová data na disku)
 a k němu nálezy. Snímky se nepřepisují; historie vzniká z jejich řady. Produkty zapisuje
-sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat.
+sortimentní agent, když produkt poprvé uvidí; nález se na produkt může odkazovat. Mediální
+agent si stejně eviduje viděné články (jen jejich ID u zdroje).
 
 Řídicí agent sem zapisuje běhy: komu v běhu poslal Zadání a jak každé dopadlo.
 """
@@ -233,6 +234,32 @@ class Board:
                 "INSERT INTO snapshot_findings (snapshot_id, finding_id) VALUES (%s, %s)",
                 [(snapshot_id, finding_id) for finding_id in finding_ids],
             )
+
+    def record_article(
+        self,
+        *,
+        source: str,
+        source_article_id: int,
+        first_seen_snapshot_id: int,
+        finding_id: int | None,
+    ) -> None:
+        """Zapíše článek, který mediální agent viděl poprvé; `finding_id` None = nerelevantní."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO articles
+                    (source, source_article_id, first_seen_snapshot_id, finding_id)
+                VALUES (%s, %s, %s, %s)
+                """,
+                [source, source_article_id, first_seen_snapshot_id, finding_id],
+            )
+
+    def article_ids(self, *, source: str) -> set[int]:
+        with self._cursor() as cur:
+            rows = cur.execute(
+                "SELECT source_article_id FROM articles WHERE source = %s", [source]
+            ).fetchall()
+        return {row[0] for row in rows}
 
     def start_beh(self, kind: DruhBehu, *, scheduled_for: datetime | None = None) -> Beh | None:
         """Zahájí běh. Termín rozvrhu, za který už běh proběhl, vrátí None."""

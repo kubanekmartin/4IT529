@@ -12,6 +12,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | --- | --- |
 | `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií |
 | `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s cenou za litr a za litr etanolu |
+| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) |
 | `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
 
@@ -84,6 +85,23 @@ a konec platnosti); každý snímek si pamatuje, které akční ceny obsahoval. 
 <http://127.0.0.1:8510/akcni-ceny> ukazuje akční ceny platné k poslednímu snímku: s datem
 konce do jeho data, bez data konce, dokud je poslední snímek obsahuje. Odkaz na produkt se
 bere jen přes https z akcniceny.cz, jinak vede na stranu výpisu.
+
+### Mediální agent (KIQ 3, zboziaprodej.cz)
+
+Jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
+jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
+a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
+vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
+LLM žádný článek neposuzuje dvakrát. Potřebuje `ANTHROPIC_API_KEY`:
+
+```sh
+docker compose exec medialni lihoviny zadani medialni --cekat 600
+```
+
+Jména osob se neukládají: nález odkazuje na článek krátkým odkazem `?p=<ID>` (adresa se
+slugem opakuje titulek i se jmény), titulek a shrnutí píše LLM bez jmen a agent v nich jména,
+která LLM v článku našel, ještě nahradí slovem „[osoba]“. Články ukáže stránka
+<http://127.0.0.1:8510/komunikace>.
 
 ## Řídicí agent a běhy
 
