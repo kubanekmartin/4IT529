@@ -72,6 +72,14 @@ services:
     volumes:
       - rawdata:/data/raw
 
+  # Rozvrh běhů (denní sběr 6:00, Brief v pondělí 7:00, pražský čas) a Selhání po 30 min.
+  # Ruční běh: docker compose exec ridici lihoviny zadani ridici
+  ridici:
+    <<: *app
+    command: ["lihoviny", "agent", "ridici"]
+    environment:
+      <<: *agent-env
+
 volumes:
   pgdata:
   rawdata:

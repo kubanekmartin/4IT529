@@ -3,6 +3,7 @@
 Agent má jméno (adresa na sběrnici) a roli. Zadání (REQUEST) obslouží `handle_request`:
 vrácený slovník odejde odesílateli jako INFORM, vyhozená výjimka jako FAILURE s důvodem.
 Ostatní druhy zpráv dostane `handle_message`, kterou si agent přepíše podle své role.
+Práci podle času (rozvrh, limity) dělá `on_idle`, kterou smyčka volá v každém kole.
 """
 
 import logging
@@ -45,6 +46,9 @@ class Agent:
     def handle_message(self, message: Message) -> None:
         log.info("%s: zpráva %s od %s nemá obsluhu", self.name, message.kind, message.sender)
 
+    def on_idle(self) -> None:
+        """Volá se v každém kole smyčky, nejméně jednou za `poll_interval`; čas z `self.clock`."""
+
     def process_pending(self) -> int:
         """Vyzvedne a obslouží všechny čekající zprávy. Vrátí jejich počet."""
         handled = 0
@@ -60,11 +64,19 @@ class Agent:
         with self.bus.listen(self.name) as inbox:
             while not stop.is_set():
                 self.process_pending()
+                self._idle()
                 deadline = time.monotonic() + poll_interval
                 # Čeká po krátkých úsecích, aby šlo smyčku zastavit bez čekání na celý interval.
                 while not stop.is_set() and (remaining := deadline - time.monotonic()) > 0:
                     if inbox.wait(min(remaining, 0.5)):
                         break
+
+    def _idle(self) -> None:
+        try:
+            self.on_idle()
+        except Exception:
+            # Chyba v jednom kole (např. výpadek databáze) nesmí zastavit službu.
+            log.exception("%s: práce podle času selhala", self.name)
 
     def _handle(self, message: Message) -> None:
         if message.kind is not Kind.REQUEST:
