@@ -1,9 +1,7 @@
 """Doručování zpráv přes sběrnici: nejvýš jednou, probuzení přes NOTIFY a pojistka v intervalu."""
 
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -26,20 +24,6 @@ def wait_for_reply(bus, zadani, timeout=5.0):
     return None
 
 
-@contextmanager
-def running(agent, *, poll_interval):
-    stop = threading.Event()
-    thread = threading.Thread(
-        target=agent.run, kwargs={"poll_interval": poll_interval, "stop": stop}
-    )
-    thread.start()
-    try:
-        yield
-    finally:
-        stop.set()
-        thread.join(timeout=5)
-
-
 def test_each_zadani_is_claimed_at_most_once_by_concurrent_replicas(bus, make_agent):
     sent = [send_zadani(bus, {"n": n}) for n in range(30)]
     replicas = [make_agent(Ozvena) for _ in range(3)]
@@ -53,22 +37,26 @@ def test_each_zadani_is_claimed_at_most_once_by_concurrent_replicas(bus, make_ag
         assert len(replies) == 1
 
 
-def test_running_agent_is_woken_by_notify_long_before_its_poll_interval(bus, make_agent):
-    with running(make_agent(Ozvena), poll_interval=60):
-        assert wait_for_reply(bus, send_zadani(bus, {"text": "rozehřátí"})) is not None
+def test_running_agent_is_woken_by_notify_long_before_its_poll_interval(
+    bus, make_agent, start_agent
+):
+    start_agent(make_agent(Ozvena), poll_interval=60)
+    assert wait_for_reply(bus, send_zadani(bus, {"text": "rozehřátí"})) is not None
 
-        reply = wait_for_reply(bus, send_zadani(bus, {"text": "ahoj"}), timeout=5)
+    reply = wait_for_reply(bus, send_zadani(bus, {"text": "ahoj"}), timeout=5)
 
     assert reply is not None
     assert reply.content == {"text": "ahoj"}
 
 
-def test_running_agent_finds_message_without_notify_at_next_poll(bus, make_agent, database_url):
-    with running(make_agent(Ozvena), poll_interval=0.2):
-        assert wait_for_reply(bus, send_zadani(bus, {"text": "rozehřátí"})) is not None
+def test_running_agent_finds_message_without_notify_at_next_poll(
+    bus, make_agent, start_agent, database_url
+):
+    start_agent(make_agent(Ozvena), poll_interval=0.2)
+    assert wait_for_reply(bus, send_zadani(bus, {"text": "rozehřátí"})) is not None
 
-        zadani = insert_without_notify(database_url, bus, {"text": "ztracené oznámení"})
-        reply = wait_for_reply(bus, zadani, timeout=5)
+    zadani = insert_without_notify(database_url, bus, {"text": "ztracené oznámení"})
+    reply = wait_for_reply(bus, zadani, timeout=5)
 
     assert reply is not None
     assert reply.content == {"text": "ztracené oznámení"}

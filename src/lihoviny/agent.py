@@ -29,6 +29,8 @@ class CollectorResult(TypedDict):
 class Agent:
     name: ClassVar[str]
     role: ClassVar[str]
+    # Pauza mezi požadavky na zdroj v sekundách: alespoň crawl-delay z robots.txt zdroje.
+    fetch_delay: ClassVar[float] = 1.0
 
     def __init__(self, *, bus: Bus, board: Board, fetcher: Fetcher, llm: Llm, clock: Clock):
         self.bus = bus

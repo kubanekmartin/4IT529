@@ -5,6 +5,7 @@ Názvy databází i role pro web jsou náhodné, takže testy z více worktrees 
 """
 
 import os
+import threading
 import uuid
 from datetime import UTC, datetime
 
@@ -83,3 +84,22 @@ def make_agent(bus, board, clock, raw_dir):
         )
 
     return make
+
+
+@pytest.fixture
+def start_agent(database_url):
+    """Spustí smyčku agenta ve vlákně, jako běží služba v compose; po testu ji zastaví."""
+    running = []
+
+    def start(agent, *, poll_interval=30.0):
+        stop = threading.Event()
+        thread = threading.Thread(
+            target=agent.run, kwargs={"poll_interval": poll_interval, "stop": stop}
+        )
+        thread.start()
+        running.append((stop, thread))
+
+    yield start
+    for stop, thread in running:
+        stop.set()
+        thread.join(timeout=5)
