@@ -29,7 +29,7 @@ router = APIRouter()
 
 
 # Cenový tlak na produkt zadavatele: o kolik je nejlevnější akční cena konkurence v kategorii
-# (za litr etanolu) pod jeho běžnou cenou. Hranice je na stránce i vysvětlená.
+# (za litr) pod jeho běžnou cenou. Hranice je na stránce i vysvětlená.
 HIGH_PRESSURE = 0.15
 TOP_CHAINS = 5
 
@@ -44,14 +44,12 @@ SORT_COLUMNS: dict[str, tuple[str, Callable[[dict[str, Any]], Any]]] = {
     "objem": ("Objem", lambda o: o["content"].get("volume_l")),
     "alkohol": ("Alkohol", lambda o: o["content"].get("abv_percent")),
     "litr": ("Kč za litr", lambda o: o["content"].get("price_per_l")),
-    "etanol": ("Kč za litr etanolu", lambda o: o["content"].get("price_per_l_ethanol")),
 }
 # Číselné sloupce s filtrem od–do: klíč v URL → pole akční ceny.
 RANGE_FILTERS = {
     "cena": "price",
     "alkohol": "abv_percent",
     "litr": "price_per_l",
-    "etanol": "price_per_l_ethanol",
 }
 UNPAIRED = "nesparovano"
 
@@ -137,7 +135,7 @@ def _sort_url(params: dict[str, str], column: str) -> str:
     """Odkaz v hlavičce sloupce: řadit podle něj, opakované kliknutí obrátí směr."""
     current, direction = _sort_param(params)
     flip = "desc" if current == column and direction == "asc" else "asc"
-    return "/akcni-ceny?" + urlencode(params | {"razeni": column, "smer": flip})
+    return "/akcni-ceny?" + urlencode(params | {"razeni": column, "smer": flip}) + "#tabulka"
 
 
 def _number(value: str | None) -> float | None:
@@ -168,19 +166,19 @@ def offer_category(offer: dict[str, Any]) -> str | None:
 
 
 def cheapest_by_category(offers: list[dict[str, Any]]) -> dict[str, tuple[float, dict[str, Any]]]:
-    """Nejnižší cena za litr etanolu v každé kategorii a akční cena, která ji má."""
+    """Nejnižší cena za litr v každé kategorii a akční cena, která ji má."""
     cheapest: dict[str, tuple[float, dict[str, Any]]] = {}
     for offer in offers:
-        category, ethanol = offer_category(offer), offer["content"].get("price_per_l_ethanol")
-        if category is None or not isinstance(ethanol, int | float):
+        category, value = offer_category(offer), offer["content"].get("price_per_l")
+        if category is None or not isinstance(value, int | float):
             continue
-        if category not in cheapest or ethanol < cheapest[category][0]:
-            cheapest[category] = (float(ethanol), offer["content"])
+        if category not in cheapest or value < cheapest[category][0]:
+            cheapest[category] = (float(value), offer["content"])
     return cheapest
 
 
 def portfolio_pressure(offers: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Pro každý produkt zadavatele: jeho běžná cena za litr etanolu proti nejlevnější akční
+    """Pro každý produkt zadavatele: jeho běžná cena za litr proti nejlevnější akční
     ceně konkurence v kategorii, kolik akcí v kategorii je, obvyklá sleva a cenový tlak."""
     cheapest = cheapest_by_category(offers)
     rows = []
@@ -191,7 +189,7 @@ def portfolio_pressure(offers: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for o in in_category
             if isinstance(o["content"].get("discount_percent"), int | float)
         ]
-        own = float(product.price_per_l_ethanol)
+        own = float(product.price_per_l)
         row: dict[str, Any] = {
             "product": product,
             "category": CATEGORIES.get(product.category, product.category),
@@ -203,9 +201,9 @@ def portfolio_pressure(offers: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "level": "bez_akce",
         }
         if product.category in cheapest:
-            ethanol, content = cheapest[product.category]
-            gap = (ethanol - own) / own
-            row |= {"cheapest": (ethanol, content), "gap": round(gap * 100)}
+            litre, content = cheapest[product.category]
+            gap = (litre - own) / own
+            row |= {"cheapest": (litre, content), "gap": round(gap * 100)}
             row["level"] = "vysoky" if gap <= -HIGH_PRESSURE else "stredni" if gap < 0 else "nizky"
         rows.append(row)
     return rows

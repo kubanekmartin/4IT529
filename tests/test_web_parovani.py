@@ -44,10 +44,10 @@ def test_akcni_ceny_page_shows_category_of_paired_akcni_cena_and_marks_unpaired(
     tuzemak = row(html, "Božkov Original Tuzemský 37,5% 0,5l", "Albert")
     assert "Rum a tuzemák" in tuzemak
     assert f'href="/sortiment#produkt-{products["tuzemak"].id}"' in tuzemak
-    # Obsah alkoholu doplnil produkt ze sortimentu, a tím i cenu za litr etanolu.
+    # Obsah alkoholu doplnil produkt ze sortimentu.
     captain = row(html, "Captain Morgan Original Spiced Gold 0,7l", "Tesco")
     assert "35 %" in captain and "ze sortimentu" in captain
-    assert "1\xa0224,08" in captain
+    assert "428,43" in captain
     assert "nespárováno" in row(html, "Jägermeister 700ml", "Kaufland")
     assert '<a href="/akcni-ceny/nesparovane">' in html
 

@@ -17,7 +17,7 @@
   .offers .product > a { color: var(--text); font-weight: 600; }
   .offers .price { font-weight: 700; color: var(--accent); }
   .offers .note { display: block; font-size: .8rem; color: var(--muted); font-weight: 400; }
-  .offers .ethanol { font-weight: 700; }
+  .offers .litre { font-weight: 700; }
   .source { font-size: .875rem; }
 
   /* Filtry a řazení tabulky (bez JavaScriptu: formulář GET a odkazy v hlavičce). */
@@ -113,22 +113,21 @@
   Akční ceny platné k poslednímu snímku z akcniceny.cz
   (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
   celkem {{ total }}. Produkt je uvedený tak, jak ho píše zdroj; kategorii má akční cena
-  spárovaná s produktem ze sortimentu rohlik.cz. Cena za litr etanolu je jen tam, kde obsah
-  alkoholu uvádí zdroj nebo spárovaný produkt.
+  spárovaná s produktem ze sortimentu rohlik.cz. Cena za litr je jen tam, kde objem
+  uvádí zdroj nebo spárovaný produkt.
 </p>
 <p class="jump"><a href="#tabulka">↓ Všechny akční ceny: filtrovat a řadit podle sloupců</a></p>
 <section class="decision" aria-labelledby="pro-vas">
   <h2 id="pro-vas">Co to znamená pro vás</h2>
   <p>Pro každý produkt zadavatele: jak daleko je nejlevnější akční cena konkurence ve stejné
-  kategorii od vaší běžné ceny, obojí za litr etanolu, aby šly srovnat různé objemy a obsahy
-  alkoholu. Podle toho zvažte, jestli a jak hlubokou akci naplánovat.</p>
+  kategorii od vaší běžné ceny, obojí za litr, aby šly srovnat různé objemy lahví. Podle toho zvažte, jestli a jak hlubokou akci naplánovat.</p>
   <div class="table-wrap">
     <table class="pressure">
       <thead>
         <tr>
           <th scope="col">Váš produkt</th>
           <th scope="col">Cenový tlak</th>
-          <th scope="col" class="num">Vaše běžná cena<br><span class="unit">Kč/l etanolu</span></th>
+          <th scope="col" class="num">Vaše běžná cena<br><span class="unit">Kč/l</span></th>
           <th scope="col">Nejlevnější akce konkurence</th>
           <th scope="col" class="num">Rozdíl</th>
           <th scope="col" class="num">Akcí v kategorii</th>
@@ -186,7 +185,7 @@
     <summary>Jak počítáme</summary>
     <ul>
       <li><strong>Cenový tlak</strong> porovnává vaši běžnou cenu (ze zadání zadavatele) s nejlevnější
-      platnou akční cenou konkurence ve stejné kategorii, obojí za litr etanolu.
+      platnou akční cenou konkurence ve stejné kategorii, obojí za litr.
       <strong>Vysoký</strong>: konkurence je v akci o {{ high_pressure }} % a víc levnější.
       <strong>Střední</strong>: levnější o méně než {{ high_pressure }} %.
       <strong>Nízký</strong>: konkurence je i v akci dražší.</li>
@@ -222,7 +221,7 @@
 {% endmacro %}
 <details class="filters" open>
   <summary>Filtrovat a řadit{% if filtered %} <span class="active">(filtr je zapnutý)</span>{% endif %}</summary>
-  <form method="get" action="/akcni-ceny">
+  <form method="get" action="/akcni-ceny#tabulka">
     <div class="filter-grid">
       <label>Produkt <input type="search" name="produkt" value="{{ params.get('produkt', '') }}" placeholder="např. Božkov"></label>
       <label>Kategorie
@@ -248,7 +247,6 @@
       {{ range_filter("cena", "Akční cena (Kč)") }}
       {{ range_filter("alkohol", "Alkohol (%)") }}
       {{ range_filter("litr", "Kč za litr") }}
-      {{ range_filter("etanol", "Kč za litr etanolu") }}
       <label>Řadit podle
         <select name="razeni">
           {% for key, label in sort_columns.items() %}<option value="{{ key }}"{% if sort == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
@@ -263,13 +261,13 @@
     </div>
     <div class="filter-actions">
       <button type="submit">Použít</button>
-      <a href="/akcni-ceny">Zrušit filtry</a>
+      <a href="/akcni-ceny#tabulka">Zrušit filtry</a>
     </div>
   </form>
 </details>
 <p class="shown muted" role="status">Zobrazeno {{ offers | length }} z {{ total }} akčních cen{% if filtered %} podle filtru{% endif %}. Kliknutím na název sloupce seřadíte tabulku, dalším kliknutím obrátíte směr.</p>
 {% if not offers %}
-<p>Filtru neodpovídá žádná akční cena. <a href="/akcni-ceny">Zrušit filtry</a></p>
+<p>Filtru neodpovídá žádná akční cena. <a href="/akcni-ceny#tabulka">Zrušit filtry</a></p>
 {% endif %}
 <table class="offers">
   <thead>
@@ -282,7 +280,6 @@
       {{ sortable("objem", "num") }}
       {{ sortable("alkohol", "num") }}
       {{ sortable("litr", "num") }}
-      {{ sortable("etanol", "num") }}
     </tr>
   </thead>
   <tbody>
@@ -303,9 +300,8 @@
       </td>
       <td data-label="Platnost" class="validity">{{ c | platnost }}</td>
       <td data-label="Objem" class="num">{% if c.volume_l %}<span>{{ c.volume_l | kratce }} l{% if "volume_l" in c.from_product %}<span class="note">ze sortimentu</span>{% endif %}</span>{% else %}—{% endif %}</td>
-      <td data-label="Alkohol" class="num">{% if c.abv_percent %}<span>{{ c.abv_percent | kratce }} %{% if "abv_percent" in c.from_product %}<span class="note">ze sortimentu</span>{% endif %}</span>{% else %}—{% endif %}</td>
-      <td data-label="Kč za litr" class="num">{{ c.price_per_l | cislo }}</td>
-      <td data-label="Kč za litr etanolu" class="num ethanol">{{ c.price_per_l_ethanol | cislo }}</td>
+      <td data-label="Alkohol" class="num abv">{% if c.abv_percent %}<span>{{ c.abv_percent | kratce }} %{% if "abv_percent" in c.from_product %}<span class="note">ze sortimentu</span>{% endif %}</span>{% else %}—{% endif %}</td>
+      <td data-label="Kč za litr" class="num litre">{{ c.price_per_l | cislo }}</td>
     </tr>
     {% endfor %}
   </tbody>

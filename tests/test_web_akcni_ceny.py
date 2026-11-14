@@ -36,18 +36,18 @@ def test_akcni_ceny_page_shows_chain_validity_and_litre_prices(web, collected):
     assert '<a href="/akcni-ceny" aria-current="page">Akční ceny</a>' in html
     assert "16. 11. 2026 7:00" in html  # čas posledního snímku
     tradicni = row(html, "Božkov Tradiční 35 % 0,5l", "BILLA")
-    for text in ["139,90 Kč", "do 17. 11. 2026", "0,5 l", "35 %", "279,80", "799,43"]:
+    for text in ["139,90 Kč", "do 17. 11. 2026", "0,5 l", "35 %", "279,80"]:
         assert text in tradicni
     assert 'href="https://www.akcniceny.cz/akce/bozkov-tradicni-35-0-5l/"' in tradicni
 
 
-def test_akcni_ceny_page_shows_card_price_future_start_and_unknown_ethanol_price(web, collected):
+def test_akcni_ceny_page_shows_card_price_future_start_and_unknown_alcohol(web, collected):
     html = web.get("/akcni-ceny").text
 
-    assert "3\xa0546,67" in row(html, "Míchaný drink 4,5% 250 ml", "Albert")
+    assert "159,60" in row(html, "Míchaný drink 4,5% 250 ml", "Albert")
     captain = row(html, "Captain Morgan Original Spiced Gold 0,7l", "Tesco")
     assert "428,43" in captain
-    assert captain.count("—") == 2  # obsah alkoholu ani cenu za litr etanolu neznáme
+    assert captain.count("—") == 1  # obsah alkoholu neznáme
     fernet = [r for r in html.split("<tr>") if "Fernet Stock 0,5l" in r and "Billa Bonus Club" in r]
     assert len(fernet) == 1
     assert "Billa Bonus Club: 99,90 Kč" in fernet[0]
@@ -101,7 +101,7 @@ def test_decision_box_shows_price_pressure_on_each_portfolio_product(web, collec
     html = web.get("/akcni-ceny").text
 
     assert "Co to znamená pro vás" in html
-    # 959 Kč/l etanolu proti Božkovu Original v Albertu za 639 Kč/l: o 33 % levněji.
+    # 360 Kč/l proti Božkovu Original v Albertu za 240 Kč/l: o 33 % levněji.
     tuzemak = pressure_row(html, "Valnovský tuzemák 37,5 % 0,5 l")
     assert "▲ vysoký" in tuzemak
     assert "Božkov Original Tuzemský 37,5% 0,5l, Albert" in tuzemak
@@ -109,7 +109,7 @@ def test_decision_box_shows_price_pressure_on_each_portfolio_product(web, collec
     assert "Zvažte vlastní akci" in tuzemak and "obvykle zlevňuje o" in tuzemak
     # Míchaný drink je i v akci dražší než Rum & Cola zadavatele běžně.
     rtd = pressure_row(html, "Valnov Rum &amp; Cola 5 % 0,33 l")
-    assert "▼ nízký" in rtd and "+30 %" in rtd
+    assert "▼ nízký" in rtd and "+17 %" in rtd
     gin = pressure_row(html, "Valnov Dry Gin 40 % 0,7 l")
     assert "– bez akce konkurence" in gin and "v kategorii teď žádná" in gin
 
@@ -126,7 +126,7 @@ def test_decision_box_lists_chains_with_most_offers_and_explains_the_rules(web, 
     assert "Stock, Rudolf Jelínek, Fruko-Schulz, Jan Becher" in html
 
 
-def offer(category, ethanol, discount=None):
+def offer(category, litre, discount=None):
     """Platná akční cena, jak ji vrací `current_offers` (spárovaná s produktem dané kategorie)."""
     return {
         "category": category,
@@ -134,22 +134,22 @@ def offer(category, ethanol, discount=None):
         "content": {
             "product": f"{category} v akci",
             "chain": "BILLA",
-            "price_per_l_ethanol": ethanol,
+            "price_per_l": litre,
             "discount_percent": discount,
         },
     }
 
 
 def test_pressure_levels_follow_the_gap_to_the_regular_price():
-    # Běžné ceny zadavatele za litr etanolu: tuzemák 959,47, vodka 906,13, bylinný 1 256,57.
+    # Běžné ceny zadavatele za litr: tuzemák 359,80, vodka 339,80, bylinný 439,80.
     rows = {
         row["product"].code: row
         for row in portfolio_pressure(
             [
-                offer("rum_tuzemak", 800.0, 30),  # o 17 % levněji
-                offer("rum_tuzemak", 900.0, 20),
-                offer("vodka", 850.0, 25),  # o 6 % levněji
-                offer("horke_likery", 1300.0),  # dražší
+                offer("rum_tuzemak", 300.0, 30),  # o 17 % levněji
+                offer("rum_tuzemak", 340.0, 20),
+                offer("vodka", 320.0, 25),  # o 6 % levněji
+                offer("horke_likery", 450.0),  # dražší
             ]
         )
     }
@@ -199,10 +199,10 @@ def test_table_sorts_by_any_column_both_ways_with_missing_values_last(web, colle
     down = prices_in_table(web.get("/akcni-ceny", params={"razeni": "cena", "smer": "desc"}).text)
     assert up == sorted(up) and down == sorted(down, reverse=True)
 
-    html = web.get("/akcni-ceny", params={"razeni": "etanol", "smer": "desc"}).text
-    cells = re.findall(r'class="num ethanol">([^<]+)<', main_table(html))
+    html = web.get("/akcni-ceny", params={"razeni": "alkohol", "smer": "desc"}).text
+    cells = re.findall(r'class="num abv">(?:<span>)?([^<% ]+)', main_table(html))
     known = [float(c.replace("\xa0", "").replace(",", ".")) for c in cells if c != "—"]
-    # Bez obsahu alkoholu (cena za litr etanolu „—“) jsou i při řazení sestupně až na konci.
+    # Bez obsahu alkoholu („—“) jsou i při řazení sestupně až na konci.
     assert "—" in cells and cells[len(known) :] == ["—"] * (len(cells) - len(known))
     assert known == sorted(known, reverse=True)
     assert 'aria-sort="descending"' in html
@@ -211,8 +211,8 @@ def test_table_sorts_by_any_column_both_ways_with_missing_values_last(web, colle
 def test_sort_links_keep_filters_and_flip_direction(web, collected):
     html = web.get("/akcni-ceny", params={"retezec": "BILLA", "razeni": "cena"}).text
 
-    assert 'href="/akcni-ceny?retezec=BILLA&amp;razeni=cena&amp;smer=desc"' in html
-    assert 'href="/akcni-ceny?retezec=BILLA&amp;razeni=produkt&amp;smer=asc"' in html
+    assert 'href="/akcni-ceny?retezec=BILLA&amp;razeni=cena&amp;smer=desc#tabulka"' in html
+    assert 'href="/akcni-ceny?retezec=BILLA&amp;razeni=produkt&amp;smer=asc#tabulka"' in html
 
 
 def test_invalid_filter_values_are_ignored_and_empty_result_says_so(web, collected):

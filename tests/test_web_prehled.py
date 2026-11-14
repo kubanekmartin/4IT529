@@ -131,19 +131,17 @@ def test_novinky_by_manufacturer_highlights_watched_competitors(web, collected):
     assert 'class="s1"' in makers and 'class="s0"' in makers
 
 
-def test_portfolio_chart_compares_regular_price_with_cheapest_offer_per_ethanol_litre(
-    web, collected
-):
+def test_portfolio_chart_compares_regular_price_with_cheapest_offer_per_litre(web, collected):
     portfolio = chart(
         web.get("/prehled").text,
-        "Cena za litr etanolu: portfolio zadavatele proti nejlevnější akci",
+        "Cena za litr: portfolio zadavatele proti nejlevnější akci",
     )
 
-    # 179,90 Kč za 0,5 l 37,5 % = 959 Kč za litr etanolu.
-    # Nejlevnější akce v kategorii Rum a tuzemák: Božkov Original v Albertu, 639 Kč.
+    # 179,90 Kč za 0,5 l = 360 Kč za litr.
+    # Nejlevnější akce v kategorii Rum a tuzemák: Božkov Original v Albertu, 240 Kč za litr.
     assert (
-        "<td>Valnovský tuzemák 37,5 % 0,5 l</td><td>959 Kč</td>"
-        "<td>639 Kč (Božkov Original Tuzemský 37,5% 0,5l, Albert)</td>"
+        "<td>Valnovský tuzemák 37,5 % 0,5 l</td><td>360 Kč</td>"
+        "<td>240 Kč (Božkov Original Tuzemský 37,5% 0,5l, Albert)</td>"
     ) in portfolio
     # Gin v ukázkách v akci není.
     assert "<td>Valnov Dry Gin 40 % 0,7 l</td>" in portfolio

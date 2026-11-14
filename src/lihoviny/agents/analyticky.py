@@ -23,9 +23,10 @@ import json
 import logging
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+from statistics import median
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -266,21 +267,23 @@ class Analyticky(Agent):
         ]
 
     def _competitors_chart(self, podklady: Podklady) -> Chart:
-        """Kolik akčních cen sledovaných konkurentů ukazoval zdroj v denních snímcích."""
+        """Kolik akčních cen sledovaných konkurentů ukazoval zdroj v denních snímcích.
+
+        Z jediného dne není vývoj, takže graf je pak pruhový: počet akčních cen každého
+        sledovaného konkurenta (i nula je zpráva) a v tabulce typická sleva a řetězce."""
         by_day = {}
         for snapshot in self.board.snapshots(agent="cenovy"):
             if podklady.since < snapshot.taken_at <= podklady.until:
                 # Za den platí poslední snímek (ruční běh týž den přepíše ranní).
                 by_day[snapshot.taken_at.astimezone(PRAGUE).date()] = snapshot.id
         days = sorted(by_day)
+        ids_by_day = [self.board.snapshot_finding_ids(by_day[day]) for day in days]
         counts = [
-            Counter(
-                maker
-                for i in self.board.snapshot_finding_ids(by_day[day])
-                for maker in podklady.manufacturers.get(i, [])
-            )
-            for day in days
+            Counter(maker for i in ids for maker in podklady.manufacturers.get(i, []))
+            for ids in ids_by_day
         ]
+        if len(days) == 1 and any(counts[0][name] for name in WATCHED_COMPETITORS):
+            return _competitors_day_chart(podklady, days[0], ids_by_day[0])
         series = [(name, [c[name] for c in counts]) for name in WATCHED_COMPETITORS]
         return line_chart(
             "Akční ceny sledovaných konkurentů podle dne",
@@ -289,6 +292,40 @@ class Analyticky(Agent):
             series,
             _format_count,
         )
+
+
+def _competitors_day_chart(podklady: Podklady, day: date, finding_ids: Iterable[int]) -> Chart:
+    """Akční ceny sledovaných konkurentů v jediném dni: pruhy a tabulka se slevou a řetězci."""
+    offers: dict[str, list[Finding]] = {name: [] for name in WATCHED_COMPETITORS}
+    for i in finding_ids:
+        finding = podklady.findings.get(i)
+        for maker in podklady.manufacturers.get(i, []):
+            if finding is not None and maker in offers:
+                offers[maker].append(finding)
+    chart = bar_chart(
+        f"Akční ceny sledovaných konkurentů {day.day}. {day.month}.",
+        ("Konkurent", "Akční ceny"),
+        [(name, len(found)) for name, found in offers.items()],
+        _format_count,
+    )
+    rows = []
+    for name, found in offers.items():
+        discounts = [
+            f.content["discount_percent"]
+            for f in found
+            if isinstance(f.content.get("discount_percent"), int | float)
+        ]
+        chains = sorted({str(f.content.get("chain")) for f in found})
+        rows.append(
+            [
+                name,
+                str(len(found)),
+                f"{median(discounts):.0f} %" if discounts else "—",
+                ", ".join(chains) if chains else "—",
+            ]
+        )
+    columns = ["Konkurent", "Akční ceny", "Typická sleva", "Řetězce"]
+    return replace(chart, columns=columns, rows=rows)
 
 
 def _failures(content: dict[str, Any], answers: dict[int, Message]) -> list[dict[str, Any]]:
@@ -658,6 +695,18 @@ def _ethanol_price(podklady: Podklady, finding: Finding) -> float | None:
     return price / (product.volume_ml / 1000 * float(product.abv) / 100)
 
 
+def _litre_price(podklady: Podklady, finding: Finding) -> float | None:
+    """Cena za litr: od cenového agenta, nebo z objemu spárovaného produktu."""
+    litre = finding.content.get("price_per_l")
+    if isinstance(litre, int | float):
+        return float(litre)
+    product = podklady.products.get(finding.product_id)
+    price = finding.content.get("price")
+    if product is None or not product.volume_ml or not isinstance(price, int | float):
+        return None
+    return price / (product.volume_ml / 1000)
+
+
 def _category(podklady: Podklady, finding: Finding) -> str | None:
     product = podklady.products.get(finding.product_id)
     if product is not None:
@@ -672,29 +721,29 @@ def _chains_chart(akcni_ceny: list[Finding]) -> Chart:
 
 
 def _portfolio_chart(podklady: Podklady, akcni_ceny: list[Finding]) -> Chart:
-    """Běžná cena produktu z portfolia za litr etanolu proti nejnižší akční ceně v kategorii."""
+    """Běžná cena produktu z portfolia za litr proti nejnižší akční ceně za litr v kategorii."""
     cheapest: dict[str, tuple[float, Finding]] = {}
     for finding in akcni_ceny:
-        category, ethanol = _category(podklady, finding), _ethanol_price(podklady, finding)
-        if category is None or ethanol is None:
+        category, litre = _category(podklady, finding), _litre_price(podklady, finding)
+        if category is None or litre is None:
             continue
-        if category not in cheapest or ethanol < cheapest[category][0]:
-            cheapest[category] = (ethanol, finding)
+        if category not in cheapest or litre < cheapest[category][0]:
+            cheapest[category] = (litre, finding)
     items = []
     for product in PORTFOLIO:
-        own = float(product.price_per_l_ethanol)
+        own = float(product.price_per_l)
         if product.category in cheapest:
-            ethanol, finding = cheapest[product.category]
+            litre, finding = cheapest[product.category]
             note = f"{finding.content.get('product')}, {finding.content.get('chain')}"
-            items.append((product.name, own, ethanol, note))
+            items.append((product.name, own, litre, note))
         else:
             items.append((product.name, own, None, ""))
     return paired_bar_chart(
-        "Cena za litr etanolu: portfolio zadavatele a nejnižší akční cena v kategorii",
+        "Cena za litr: portfolio zadavatele a nejnižší akční cena v kategorii",
         ("Produkt", "Běžná cena portfolia", "Nejnižší akční cena v kategorii"),
         items,
         lambda value: f"{_whole(value)} Kč",
-        "bez akční ceny se známým obsahem alkoholu",
+        "bez akční ceny se známým objemem",
     )
 
 

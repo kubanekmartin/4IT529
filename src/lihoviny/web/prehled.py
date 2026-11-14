@@ -169,8 +169,8 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
                 (
                     portfolio_vs_offers(offers),
                     "Modře běžná cena produktu zadavatele, oranžově nejlevnější akční cena "
-                    "konkurence ve stejné kategorii, obojí za litr etanolu, aby šly srovnat "
-                    "různé objemy a obsahy alkoholu. Čím delší oranžový pruh proti modrému, "
+                    "konkurence ve stejné kategorii, obojí za litr, aby šly srovnat různé "
+                    "objemy lahví. Čím delší oranžový pruh proti modrému, "
                     "tím menší cenový tlak; kratší oranžový pruh znamená, že konkurence "
                     "v akci prodává levněji než zadavatel běžně.",
                 ),
@@ -252,18 +252,18 @@ def offers_by_chain(offers: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def portfolio_vs_offers(offers: list[dict[str, Any]]) -> dict[str, Any]:
-    """Běžná cena produktu z portfolia za litr etanolu proti nejnižší akční ceně v kategorii."""
+    """Běžná cena produktu z portfolia za litr proti nejnižší akční ceně za litr v kategorii."""
     cheapest = cheapest_by_category(offers)
     items: list[tuple[str, float | None, float | None, str]] = []
     for product in PORTFOLIO:
-        own = float(product.price_per_l_ethanol)
+        own = float(product.price_per_l)
         if product.category in cheapest:
-            ethanol, content = cheapest[product.category]
-            items.append((product.name, own, ethanol, f"{content['product']}, {content['chain']}"))
+            litre, content = cheapest[product.category]
+            items.append((product.name, own, litre, f"{content['product']}, {content['chain']}"))
         else:
             items.append((product.name, own, None, ""))
     return paired_bar_chart(
-        "Cena za litr etanolu: portfolio zadavatele proti nejlevnější akci",
+        "Cena za litr: portfolio zadavatele proti nejlevnější akci",
         ("Produkt", "Běžná cena zadavatele", "Nejlevnější akční cena v kategorii"),
         items,
         lambda value: f"{value:,.0f}".replace(",", "\xa0") + " Kč",
