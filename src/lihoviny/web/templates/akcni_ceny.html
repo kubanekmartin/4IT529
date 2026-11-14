@@ -20,6 +20,70 @@
   .offers .ethanol { font-weight: 700; }
   .source { font-size: .875rem; }
 
+  /* Filtry a řazení tabulky (bez JavaScriptu: formulář GET a odkazy v hlavičce). */
+  .filters { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .5rem 1rem; margin: 0 0 .75rem; }
+  .filters summary { cursor: pointer; font-weight: 600; font-size: 1.0625rem; }
+  .jump { margin: 0 0 1rem; font-weight: 600; }
+  .filters .active { color: var(--accent); font-weight: 400; }
+  .filter-grid { display: grid; gap: .75rem 1rem; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); margin: .75rem 0; }
+  .filter-grid label, .filter-grid legend { display: flex; flex-direction: column; gap: .2rem; font-size: .8125rem; color: var(--muted); }
+  .filter-grid fieldset { border: 0; padding: 0; margin: 0; display: flex; align-items: flex-end; gap: .35rem; flex-wrap: wrap; }
+  .filter-grid legend { padding: 0; margin-bottom: .2rem; width: 100%; }
+  .filter-grid input, .filter-grid select {
+    font: inherit; font-size: .9375rem; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 4px; padding: .3rem .45rem; min-width: 0;
+  }
+  .filter-grid fieldset input { width: 5.5rem; flex: 1; }
+  .filter-actions { display: flex; gap: 1rem; align-items: center; margin-bottom: .25rem; }
+  .filter-actions button {
+    font: inherit; font-weight: 600; color: var(--surface); background: var(--link);
+    border: 0; border-radius: 4px; padding: .4rem 1rem; cursor: pointer;
+  }
+  .shown { font-size: .875rem; margin: 0 0 .5rem; }
+  .offers th a.sort { color: var(--link); text-decoration: underline dotted; text-underline-offset: 3px; display: inline-flex; gap: .25rem; align-items: baseline; }
+  .offers th a.sort:hover { text-decoration-style: solid; }
+  .offers th .arrow { font-size: .75rem; opacity: .8; }
+  .offers th[aria-sort] { color: var(--text); }
+  .offers th[aria-sort] .arrow { opacity: 1; }
+
+  /* Co to znamená pro vás: tlak na produkty zadavatele a řetězce. */
+  .decision {
+    background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: .25rem 1rem .75rem; margin: 0 0 1.5rem;
+  }
+  .decision h2 { font-size: 1.25rem; margin: .75rem 0 .25rem; }
+  .decision h3 { font-size: 1.05rem; margin: 1.25rem 0 .25rem; }
+  .decision p { margin: 0 0 .5rem; max-width: 52rem; }
+  .table-wrap { overflow-x: auto; }
+  .pressure, .chains { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+  .pressure th, .pressure td, .chains th, .chains td {
+    padding: .4rem .5rem; text-align: left; vertical-align: top;
+  }
+  .pressure th, .chains th { font-size: .8rem; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+  .chains td { border-bottom: 1px solid var(--border); }
+  .pressure .num, .chains .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pressure .unit { font-weight: 400; }
+  .pressure .note { display: block; font-size: .8rem; color: var(--muted); }
+  .pressure .advice { font-size: .875rem; color: var(--muted); border-bottom: 1px solid var(--border); padding-top: 0; }
+  .signal { font-weight: 600; white-space: nowrap; }
+  .signal.vysoky { color: var(--failure); }
+  .signal.stredni { color: var(--query); }
+  .signal.nizky { color: var(--inform); }
+  .signal.bez { color: var(--muted); }
+  .decision details { margin-top: .75rem; font-size: .875rem; }
+  .decision summary { cursor: pointer; font-weight: 600; }
+  .decision ul { padding-left: 1.25rem; margin: .5rem 0 0; }
+  .all-offers { font-size: 1.25rem; margin: 1.5rem 0 .5rem; }
+  @media (max-width: 47.99rem) {
+    .pressure thead { display: none; }
+    .pressure, .pressure tbody, .pressure tr, .pressure td { display: block; }
+    .pressure tr.pressure-row { padding-top: .5rem; }
+    .pressure td { display: flex; justify-content: space-between; gap: 1rem; padding: .15rem 0; text-align: right; }
+    .pressure td[data-label]::before { content: attr(data-label); color: var(--muted); text-align: left; }
+    .pressure td:first-child { display: block; text-align: left; }
+    .pressure td.advice { display: block; text-align: left; padding-bottom: .5rem; }
+  }
+
   /* Na úzkém displeji je každá akční cena kartička: řádek tabulky se poskládá pod sebe. */
   @media (max-width: 47.99rem) {
     .offers, .offers tbody, .offers tr, .offers td { display: block; }
@@ -48,10 +112,94 @@
 <p class="muted">
   Akční ceny platné k poslednímu snímku z akcniceny.cz
   (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
-  celkem {{ offers | length }}. Produkt je uvedený tak, jak ho píše zdroj; kategorii má akční cena
+  celkem {{ total }}. Produkt je uvedený tak, jak ho píše zdroj; kategorii má akční cena
   spárovaná s produktem ze sortimentu rohlik.cz. Cena za litr etanolu je jen tam, kde obsah
   alkoholu uvádí zdroj nebo spárovaný produkt.
 </p>
+<p class="jump"><a href="#tabulka">↓ Všechny akční ceny: filtrovat a řadit podle sloupců</a></p>
+<section class="decision" aria-labelledby="pro-vas">
+  <h2 id="pro-vas">Co to znamená pro vás</h2>
+  <p>Pro každý produkt zadavatele: jak daleko je nejlevnější akční cena konkurence ve stejné
+  kategorii od vaší běžné ceny, obojí za litr etanolu, aby šly srovnat různé objemy a obsahy
+  alkoholu. Podle toho zvažte, jestli a jak hlubokou akci naplánovat.</p>
+  <div class="table-wrap">
+    <table class="pressure">
+      <thead>
+        <tr>
+          <th scope="col">Váš produkt</th>
+          <th scope="col">Cenový tlak</th>
+          <th scope="col" class="num">Vaše běžná cena<br><span class="unit">Kč/l etanolu</span></th>
+          <th scope="col">Nejlevnější akce konkurence</th>
+          <th scope="col" class="num">Rozdíl</th>
+          <th scope="col" class="num">Akcí v kategorii</th>
+          <th scope="col" class="num">Obvyklá sleva</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pressure %}
+        <tr class="pressure-row">
+          <td><strong>{{ row.product.name }}</strong><span class="note">{{ row.category }}</span></td>
+          <td data-label="Cenový tlak">
+            {% if row.level == "vysoky" %}<span class="signal vysoky">▲ vysoký</span>
+            {% elif row.level == "stredni" %}<span class="signal stredni">● střední</span>
+            {% elif row.level == "nizky" %}<span class="signal nizky">▼ nízký</span>
+            {% else %}<span class="signal bez">– bez akce konkurence</span>{% endif %}
+          </td>
+          <td data-label="Vaše běžná cena" class="num">{{ row.own | cislo(0) }}</td>
+          <td data-label="Nejlevnější akce">
+            {% if row.cheapest %}{{ row.cheapest[0] | cislo(0) }} Kč/l
+            <span class="note">{{ row.cheapest[1].product }}, {{ row.cheapest[1].chain }}</span>
+            {% else %}<span class="muted">v kategorii teď žádná</span>{% endif %}
+          </td>
+          <td data-label="Rozdíl" class="num">{% if row.gap is none %}—{% elif row.gap < 0 %}−{{ -row.gap }} %{% else %}+{{ row.gap }} %{% endif %}</td>
+          <td data-label="Akcí v kategorii" class="num">{{ row.offer_count }}</td>
+          <td data-label="Obvyklá sleva" class="num">{% if row.typical_discount is not none %}−{{ row.typical_discount }} %{% else %}—{% endif %}</td>
+        </tr>
+        <tr class="advice-row"><td colspan="7" class="advice">
+          {% if row.level == "vysoky" %}Konkurence v akci prodává výrazně levněji než vy běžně. Zvažte vlastní akci{% if row.typical_discount %} (konkurence v kategorii obvykle zlevňuje o {{ row.typical_discount }} %){% endif %}, nebo zdůrazněte, čím se váš produkt liší.
+          {% elif row.level == "stredni" %}Akce konkurence jsou těsně pod vaší běžnou cenou. Stačit může krátká akce v řetězci, kde je konkurence nejaktivnější.
+          {% elif row.level == "nizky" %}I v akci je konkurence dražší než vy běžně. Akce teď není nutná; běžnou cenu můžete držet.
+          {% else %}Konkurence v kategorii teď zlevněná není: vlastní akce by neměla přímé cenové srovnání.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if chains %}
+  <h3>Kde konkurence zlevňuje nejvíc</h3>
+  <p class="muted">Řetězce s nejvíc platnými akčními cenami lihovin. Řetězec s mnoha akcemi je
+  vhodný partner pro vlastní promo, ale také místo nejtvrdší cenové konkurence.</p>
+  <div class="table-wrap">
+    <table class="chains">
+      <thead><tr><th scope="col">Řetězec</th><th scope="col" class="num">Akčních cen</th><th scope="col" class="num">z toho sledovaných konkurentů</th><th scope="col" class="num">Průměrná sleva</th></tr></thead>
+      <tbody>
+        {% for chain in chains %}
+        <tr class="chain-row"><td>{{ chain.chain }}</td><td class="num">{{ chain.count }}</td><td class="num">{{ chain.watched }}</td><td class="num">{% if chain.discount is not none %}−{{ chain.discount }} %{% else %}—{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <details>
+    <summary>Jak počítáme</summary>
+    <ul>
+      <li><strong>Cenový tlak</strong> porovnává vaši běžnou cenu (ze zadání zadavatele) s nejlevnější
+      platnou akční cenou konkurence ve stejné kategorii, obojí za litr etanolu.
+      <strong>Vysoký</strong>: konkurence je v akci o {{ high_pressure }} % a víc levnější.
+      <strong>Střední</strong>: levnější o méně než {{ high_pressure }} %.
+      <strong>Nízký</strong>: konkurence je i v akci dražší.</li>
+      <li><strong>Obvyklá sleva</strong> je medián slev akčních cen v kategorii, jak je uvádí zdroj.</li>
+      <li>Sledovaní konkurenti: {{ watched | join(", ") }}; počítají se jen akční ceny spárované
+      s produktem ze sortimentu, u kterého známe výrobce.</li>
+      <li>Nástroj nevidí skutečné prodeje, jen nabídku. Cenový tlak je signál pro rozhodnutí,
+      ne doporučení samo o sobě.</li>
+    </ul>
+  </details>
+</section>
+
+<h2 class="all-offers" id="tabulka">Všechny platné akční ceny</h2>
 {% if unpaired_count %}
 <p class="muted">
   Nespárovaných akčních cen je {{ unpaired_count }} (Rohlík ve výpisu ukazuje jen část sortimentu):
@@ -59,18 +207,82 @@
 </p>
 {% endif %}
 
+{% macro sortable(column, cls) %}
+<th scope="col"{% if cls %} class="{{ cls }}"{% endif %}{% if sort == column %} aria-sort="{{ "ascending" if direction == "asc" else "descending" }}"{% endif %}>
+  <a class="sort" href="{{ sort_url(column) }}">{{ sort_columns[column] }}<span class="arrow" aria-hidden="true">{% if sort == column %}{{ "▲" if direction == "asc" else "▼" }}{% else %}↕{% endif %}</span></a>
+</th>
+{% endmacro %}
+{% macro range_filter(key, label) %}
+<fieldset class="range">
+  <legend>{{ label }}</legend>
+  <input type="text" inputmode="decimal" name="{{ key }}_od" value="{{ params.get(key ~ '_od', '') }}" placeholder="od" aria-label="{{ label }} od">
+  <span aria-hidden="true">–</span>
+  <input type="text" inputmode="decimal" name="{{ key }}_do" value="{{ params.get(key ~ '_do', '') }}" placeholder="do" aria-label="{{ label }} do">
+</fieldset>
+{% endmacro %}
+<details class="filters" open>
+  <summary>Filtrovat a řadit{% if filtered %} <span class="active">(filtr je zapnutý)</span>{% endif %}</summary>
+  <form method="get" action="/akcni-ceny">
+    <div class="filter-grid">
+      <label>Produkt <input type="search" name="produkt" value="{{ params.get('produkt', '') }}" placeholder="např. Božkov"></label>
+      <label>Kategorie
+        <select name="kategorie">
+          <option value="">všechny</option>
+          {% for code, label in category_options %}<option value="{{ code }}"{% if params.get('kategorie') == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          <option value="nesparovano"{% if params.get('kategorie') == 'nesparovano' %} selected{% endif %}>nespárováno</option>
+        </select>
+      </label>
+      <label>Řetězec
+        <select name="retezec">
+          <option value="">všechny</option>
+          {% for chain in chain_options %}<option{% if params.get('retezec') == chain %} selected{% endif %}>{{ chain }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Platí k datu <input type="date" name="plati" value="{{ params.get('plati', '') }}"></label>
+      <label>Objem
+        <select name="objem">
+          <option value="">všechny</option>
+          {% for volume in volume_options %}<option value="{{ volume }}"{% if params.get('objem') == volume | string %} selected{% endif %}>{{ volume | kratce }} l</option>{% endfor %}
+        </select>
+      </label>
+      {{ range_filter("cena", "Akční cena (Kč)") }}
+      {{ range_filter("alkohol", "Alkohol (%)") }}
+      {{ range_filter("litr", "Kč za litr") }}
+      {{ range_filter("etanol", "Kč za litr etanolu") }}
+      <label>Řadit podle
+        <select name="razeni">
+          {% for key, label in sort_columns.items() %}<option value="{{ key }}"{% if sort == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Směr
+        <select name="smer">
+          <option value="asc"{% if direction == 'asc' %} selected{% endif %}>vzestupně</option>
+          <option value="desc"{% if direction == 'desc' %} selected{% endif %}>sestupně</option>
+        </select>
+      </label>
+    </div>
+    <div class="filter-actions">
+      <button type="submit">Použít</button>
+      <a href="/akcni-ceny">Zrušit filtry</a>
+    </div>
+  </form>
+</details>
+<p class="shown muted" role="status">Zobrazeno {{ offers | length }} z {{ total }} akčních cen{% if filtered %} podle filtru{% endif %}. Kliknutím na název sloupce seřadíte tabulku, dalším kliknutím obrátíte směr.</p>
+{% if not offers %}
+<p>Filtru neodpovídá žádná akční cena. <a href="/akcni-ceny">Zrušit filtry</a></p>
+{% endif %}
 <table class="offers">
   <thead>
     <tr>
-      <th scope="col">Produkt</th>
-      <th scope="col">Kategorie</th>
-      <th scope="col">Řetězec</th>
-      <th scope="col" class="num">Akční cena</th>
-      <th scope="col">Platnost</th>
-      <th scope="col" class="num">Objem</th>
-      <th scope="col" class="num">Alkohol</th>
-      <th scope="col" class="num">Kč za litr</th>
-      <th scope="col" class="num">Kč za litr etanolu</th>
+      {{ sortable("produkt", "") }}
+      {{ sortable("kategorie", "") }}
+      {{ sortable("retezec", "") }}
+      {{ sortable("cena", "num") }}
+      {{ sortable("platnost", "") }}
+      {{ sortable("objem", "num") }}
+      {{ sortable("alkohol", "num") }}
+      {{ sortable("litr", "num") }}
+      {{ sortable("etanol", "num") }}
     </tr>
   </thead>
   <tbody>

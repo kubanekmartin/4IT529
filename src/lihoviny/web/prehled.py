@@ -14,11 +14,10 @@ import psycopg
 from fastapi import APIRouter, Depends, Request
 from psycopg.rows import dict_row
 
-from lihoviny.agents.analyticky import LISTING_CATEGORIES
 from lihoviny.agents.medialni import CHANNELS, TOPICS
 from lihoviny.charts import bar_chart, paired_bar_chart, timeline_chart
 from lihoviny.products import CATEGORIES
-from lihoviny.web.akcni_ceny import current_offers
+from lihoviny.web.akcni_ceny import cheapest_by_category, current_offers
 from lihoviny.web.common import db, prague_date, templates
 from lihoviny.zadavatel import PORTFOLIO, WATCHED_COMPETITORS
 
@@ -253,18 +252,8 @@ def offers_by_chain(offers: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def portfolio_vs_offers(offers: list[dict[str, Any]]) -> dict[str, Any]:
-    """Běžná cena produktu z portfolia za litr etanolu proti nejnižší akční ceně v kategorii.
-
-    Kategorie akční ceny je kategorie spárovaného produktu, jinak kategorie výpisu u zdroje."""
-    cheapest: dict[str, tuple[float, dict[str, Any]]] = {}
-    for offer in offers:
-        content = offer["content"]
-        category = offer["category"] or LISTING_CATEGORIES.get(content.get("source_category"))
-        ethanol = content.get("price_per_l_ethanol")
-        if category is None or not isinstance(ethanol, int | float):
-            continue
-        if category not in cheapest or ethanol < cheapest[category][0]:
-            cheapest[category] = (float(ethanol), content)
+    """Běžná cena produktu z portfolia za litr etanolu proti nejnižší akční ceně v kategorii."""
+    cheapest = cheapest_by_category(offers)
     items: list[tuple[str, float | None, float | None, str]] = []
     for product in PORTFOLIO:
         own = float(product.price_per_l_ethanol)
