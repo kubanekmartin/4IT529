@@ -42,6 +42,66 @@
     main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
     h1 { font-size: 1.5rem; margin: .5rem 0 1rem; }
     .muted { color: var(--muted); }
+
+    /* Grafy (lihoviny.charts): barvy řad validované pro barvoslepost, světlý i tmavý režim.
+       Zelená a žlutá mají na bílé kontrast pod 3:1, proto graf vždy vypisuje hodnoty
+       a nese tabulku dat. `s0` je šedá pro „ostatní“ vedle zvýrazněné řady. */
+    :root {
+      --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+      --series-0: #a3a29c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+        --series-0: #6b6a66;
+      }
+    }
+    .charts { display: grid; gap: .75rem; }
+    @media (min-width: 56rem) { .charts { grid-template-columns: 1fr 1fr; } }
+    .chart {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      padding: .75rem 1rem; margin: 0; min-width: 0;
+    }
+    .chart figcaption { font-weight: 600; margin-bottom: .5rem; }
+    .graf { display: block; overflow: visible; }
+    .graf .label { fill: var(--text); }
+    .graf .value { fill: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .graf .tick { fill: var(--muted); font-size: 11px; }
+    .graf .grid { stroke: var(--border); }
+    .graf circle { stroke: var(--surface); }
+    .graf rect.s0, .graf circle.s0 { fill: var(--series-0); }
+    .graf rect.s1, .graf circle.s1 { fill: var(--series-1); }
+    .graf rect.s2, .graf circle.s2 { fill: var(--series-2); }
+    .graf rect.s3, .graf circle.s3 { fill: var(--series-3); }
+    .graf rect.s4, .graf circle.s4 { fill: var(--series-4); }
+    .graf line.s1 { stroke: var(--series-1); }
+    .graf line.s2 { stroke: var(--series-2); }
+    .graf line.s3 { stroke: var(--series-3); }
+    .graf line.s4 { stroke: var(--series-4); }
+    .chart details { margin-top: .5rem; font-size: .875rem; }
+    .chart table { border-collapse: collapse; width: 100%; margin-top: .25rem; }
+    .chart th, .chart td { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid var(--border); }
+    .chart th { color: var(--muted); font-weight: 600; }
+    .chart .jak-cist { color: var(--muted); }
+    .chart .jak-cist p { margin: .25rem 0 0; }
+
+    /* Dlaždice s jedním číslem (komponenty.html: stat_tile). */
+    .tiles {
+      display: grid; gap: .75rem; margin: 0 0 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+    }
+    .tile {
+      display: block; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: .75rem 1rem; color: var(--text); text-decoration: none;
+    }
+    a.tile:hover { border-color: var(--link); }
+    .tile .value {
+      display: block; font-size: 2rem; font-weight: 700; line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+    .tile .label { display: block; font-size: .9375rem; }
+    .tile .note { display: block; font-size: .8125rem; color: var(--muted); margin-top: .25rem; }
+    .freshness { font-size: .875rem; color: var(--muted); margin: 0 0 .75rem; }
   </style>
   {% block head %}{% endblock %}
 </head>

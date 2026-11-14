@@ -14,6 +14,7 @@ from lihoviny.web import (
     brief,
     komunikace,
     log,
+    prehled,
     regulace,
     sortiment,
 )
@@ -21,6 +22,7 @@ from lihoviny.web.common import templates
 
 # (router, cesta v navigaci, popisek v navigaci)
 PAGES = [
+    (prehled.router, "/prehled", "Přehled"),
     (brief.router, "/brief", "Brief"),
     (sortiment.router, "/sortiment", "Sortiment"),
     (akcni_ceny.router, "/akcni-ceny", "Akční ceny"),
@@ -46,7 +48,7 @@ def create_app(database_url: str) -> FastAPI:
 
     @app.get("/")
     def home():
-        return RedirectResponse("/brief")
+        return RedirectResponse("/prehled")
 
     for router, _, _ in PAGES:
         app.include_router(router)

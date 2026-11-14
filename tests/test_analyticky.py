@@ -484,7 +484,7 @@ def test_web_says_so_when_no_brief_exists_yet(web):
     assert "Zatím žádný Brief." in page.text
     assert "Zatím žádný Brief." in web.get("/brief/archiv").text
     assert web.get("/brief/1").status_code == 404
-    assert web.get("/", follow_redirects=False).headers["location"] == "/brief"
+    assert web.get("/", follow_redirects=False).headers["location"] == "/prehled"
 
 
 def test_brief_states_selhani_of_the_last_collection_explicitly(bus, board, make_agent, web):

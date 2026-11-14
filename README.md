@@ -10,7 +10,8 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 
 | Stránka | Co |
 | --- | --- |
-| `/brief` | aktuální Brief (na něj vede `/`), `/brief/archiv` starší Briefy |
+| `/prehled` | Přehled (na něj vede `/`): hlavní čísla, grafy po KIQ s vysvětlením a stav sběru |
+| `/brief` | aktuální Brief, `/brief/archiv` starší Briefy |
 | `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny |
 | `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s kategorií, cenou za litr a za litr etanolu |
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |

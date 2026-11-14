@@ -1,20 +1,23 @@
-"""Grafy Briefu jako SVG: vznikají při psaní Briefu, ukládají se s ním a web je jen vloží.
+"""Grafy jako SVG: grafy Briefu vznikají při psaní Briefu a ukládají se s ním, grafy
+Přehledu (lihoviny.web.prehled) web spočítá při každém zobrazení stránky.
 
-SVG je psané ručně, bez knihovny: Brief potřebuje jen pruhy, dvojice pruhů a čáry po dnech,
+SVG je psané ručně, bez knihovny: stačí pruhy, dvojice pruhů, čáry po dnech a časová osa,
 a knihovna jako matplotlib by do image přidala desítky MB kvůli pár obdélníkům. Vodorovné
 souřadnice jsou v procentech šířky, svislé v pixelech, takže graf vyplní šířku stránky na
 mobilu i na počítači a písmo zůstane stejně velké.
 
-Barvy určují třídy (`s1`–`s4` pro řady, `grid`, `tick`, `label`, `value`); jejich hodnoty pro
-světlý i tmavý režim má stránka Briefu. Text ze zdrojů prochází `escape`, protože SVG jde do
-stránky přímo. Každý graf nese i tabulku dat: pro čtečky obrazovky a pro barvy řad, které
-mají na světlém pozadí nízký kontrast. Najetí myší na značku ukáže hodnotu (`<title>`).
+Barvy určují třídy (`s1`–`s4` pro řady, `s0` šedá pro ostatní vedle zvýrazněných, `grid`,
+`tick`, `label`, `value`); jejich hodnoty pro světlý i tmavý režim má `base.html`. Text ze
+zdrojů prochází `escape`, protože SVG jde do stránky přímo. Každý graf nese i tabulku dat:
+pro čtečky obrazovky a pro barvy řad, které mají na světlém pozadí nízký kontrast. Najetí
+myší na značku ukáže hodnotu (`<title>`).
 """
 
 import html
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import asdict, dataclass
+from datetime import date
 from typing import Any
 
 FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif"
@@ -44,24 +47,90 @@ def bar_chart(
     columns: tuple[str, str],
     items: Sequence[tuple[str, float]],
     fmt: Callable[[float], str],
+    *,
+    highlight: Collection[str] | None = None,
+    legend: tuple[str, str] = ("", ""),
 ) -> Chart:
-    """Vodorovné pruhy jedné řady: `items` jsou (popisek, hodnota)."""
+    """Vodorovné pruhy jedné řady: `items` jsou (popisek, hodnota).
+
+    S `highlight` mají barvu jen pruhy těchto popisků, ostatní jsou šedé (`s0`), a nad
+    grafem je legenda `legend` (zvýrazněné, ostatní). Tabulka dat pak zvýraznění uvádí
+    i textem, aby nezáleželo jen na barvě."""
     if not items:
         return _empty(title, list(columns))
     top = max(value for _, value in items)
     parts = []
+    offset = 0
+    if highlight is not None:
+        parts.append(_legend(legend, per_row=2, series=[1, 0]))
+        offset = LEGEND_ROW + 8
     for index, (label, value) in enumerate(items):
-        y = index * ROW
+        y = offset + index * ROW
         width = _share(value, top)
+        series = 1 if highlight is None or label in highlight else 0
         parts.append(
             f"<g><title>{_e(label)}: {_e(fmt(value))}</title>"
             f'<text class="label" x="0" y="{y + 14}">{_e(_short(label))}</text>'
-            f"{_bar(1, y + 20, width, BAR)}"
+            f"{_bar(series, y + 20, width, BAR)}"
             f'<text class="value" x="{width:.2f}%" dx="6" y="{y + 30}">{_e(fmt(value))}</text>'
             "</g>"
         )
-    rows = [[label, fmt(value)] for label, value in items]
-    return Chart(title, _svg(title, len(items) * ROW, parts), list(columns), rows)
+    rows = [
+        [label if highlight is None or label not in highlight else f"{label} ({legend[0]})",
+         fmt(value)]
+        for label, value in items
+    ]  # fmt: skip
+    return Chart(title, _svg(title, offset + len(items) * ROW, parts), list(columns), rows)
+
+
+def timeline_chart(
+    title: str,
+    columns: tuple[str, str, str],
+    items: Sequence[tuple[str, date | None, int, str]],
+    legend: Sequence[str],
+    missing: str,
+) -> Chart:
+    """Časová osa po řádcích: `items` jsou (popisek, datum, řada, poznámka).
+
+    Každý řádek má popisek nad osou a tečku v místě data mezi nejdřívějším a nejpozdějším
+    datem; vedle tečky je datum a poznámka (např. úroveň dopadu), takže řada není jen barva.
+    `legend` jsou názvy řad 1, 2, …; řádek bez data vypíše `missing`."""
+    if not items:
+        return _empty(title, list(columns))
+    dates = [when for _, when, _, _ in items if when is not None]
+    first, last = (min(dates), max(dates)) if dates else (None, None)
+    parts = [_legend(legend, per_row=len(legend))]
+    axis = LEGEND_ROW + 22
+    if first is not None and last is not None:
+        parts.append(
+            f'<line class="grid" x1="0" x2="{BAR_MAX}%" y1="{axis}" y2="{axis}"/>'
+            f'<text class="tick" x="0" y="{axis - 6}">{_e(_date(first))}</text>'
+        )
+        if last != first:
+            parts.append(
+                f'<text class="tick" x="{BAR_MAX}%" y="{axis - 6}" text-anchor="end">'
+                f"{_e(_date(last))}</text>"
+            )
+    for index, (label, when, series, note) in enumerate(items):
+        y = axis + 8 + index * ROW
+        parts.append(f'<text class="label" x="0" y="{y + 14}">{_e(_short(label))}</text>')
+        if when is None or first is None or last is None:
+            parts.append(f'<text class="tick" x="0" y="{y + 30}">{_e(missing)}</text>')
+            continue
+        span = (last - first).days
+        x = BAR_MAX / 2 if span == 0 else (when - first).days / span * BAR_MAX
+        text = f"{_date(when)} · {note}" if note else _date(when)
+        # U pravého okraje patří text před tečku, aby nepřetekl.
+        anchor = 'text-anchor="end" dx="-10"' if x > BAR_MAX / 2 else 'dx="10"'
+        parts.append(
+            f"<g><title>{_e(label)}: {_e(text)}</title>"
+            f'<line class="grid" x1="{x:.2f}%" x2="{x:.2f}%" y1="{axis}" y2="{y + 26}"/>'
+            f'<circle class="s{series}" cx="{x:.2f}%" cy="{y + 26}" r="5" stroke-width="2"/>'
+            f'<text class="value" x="{x:.2f}%" {anchor} y="{y + 30}">{_e(text)}</text>'
+            "</g>"
+        )
+    rows = [[label, _date(when) if when else missing, note] for label, when, _, note in items]
+    return Chart(title, _svg(title, axis + 8 + len(items) * ROW, parts), list(columns), rows)
 
 
 def paired_bar_chart(
@@ -185,13 +254,16 @@ def _bar(series: int, y: float, width: float, height: int) -> str:
     )
 
 
-def _legend(names: Sequence[str], per_row: int) -> str:
-    """Legenda nad grafem: barevný čtverec a název řady, `per_row` řad vedle sebe."""
+def _legend(names: Sequence[str], per_row: int, series: Sequence[int] | None = None) -> str:
+    """Legenda nad grafem: barevný čtverec a název řady, `per_row` řad vedle sebe.
+
+    `series` jsou čísla tříd barev pro jednotlivé názvy (výchozí 1, 2, …)."""
     items = []
     for index, name in enumerate(names):
         x, y = 100 // per_row * (index % per_row), (index // per_row) * LEGEND_ROW
+        number = series[index] if series is not None else index + 1
         items.append(
-            f'<rect class="s{index + 1}" x="{x}%" y="{y + 3}" width="10" height="10" rx="2"/>'
+            f'<rect class="s{number}" x="{x}%" y="{y + 3}" width="10" height="10" rx="2"/>'
             f'<text class="label" x="{x}%" dx="16" y="{y + 12}">{_e(_short(name))}</text>'
         )
     return "<g>" + "".join(items) + "</g>"
@@ -219,6 +291,10 @@ def _short(text: str, limit: int = LABEL_LIMIT) -> str:
 
 def _or(value: float | None, fmt: Callable[[float], str], missing: str) -> str:
     return missing if value is None else fmt(value)
+
+
+def _date(value: date) -> str:
+    return f"{value.day}. {value.month}. {value.year}"
 
 
 def _e(text: str) -> str:

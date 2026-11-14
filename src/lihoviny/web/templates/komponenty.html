@@ -1,0 +1,45 @@
+{#- Sdílené části stránek. Styly jsou v base.html.
+    Použití: {% from "komponenty.html" import chart_figure, stat_tile, freshness %} -#}
+
+{#- Graf z lihoviny.charts (dict s title, svg, columns, rows). SVG prošlo `escape` při
+    sestavení, proto `safe`. `explanation` je volitelný text „Jak to číst“: co graf ukazuje
+    a co znamená pro rozhodnutí zadavatele. -#}
+{% macro chart_figure(chart, explanation=none) %}
+<figure class="chart">
+  <figcaption>{{ chart.title }}</figcaption>
+  {{ chart.svg | safe }}
+  {% if explanation %}
+  <details class="jak-cist">
+    <summary>Jak to číst</summary>
+    <p>{{ explanation }}</p>
+  </details>
+  {% endif %}
+  {% if chart.rows %}
+  <details>
+    <summary>Data grafu</summary>
+    <table>
+      <thead><tr>{% for column in chart.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in chart.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+</figure>
+{% endmacro %}
+
+{#- Dlaždice s jedním číslem: hodnota, popisek, poznámka (např. stáří dat) a odkaz na detail. -#}
+{% macro stat_tile(value, label, note=none, href=none) %}
+<{{ "a" if href else "div" }} class="tile"{% if href %} href="{{ href }}"{% endif %}>
+  <span class="value">{{ value }}</span>
+  <span class="label">{{ label }}</span>
+  {% if note %}<span class="note">{{ note }}</span>{% endif %}
+</{{ "a" if href else "div" }}>
+{% endmacro %}
+
+{#- Čas dat: „Data k 17. 11. 2026 7:00:00 (zdroj)“, bez snímku „Zatím bez dat“. -#}
+{% macro freshness(taken_at, source=none) %}
+<p class="freshness">
+  {% if taken_at %}Data k {{ taken_at | cas }}{% if source %} ({{ source }}){% endif %}{% else %}Zatím bez dat{% if source %} ({{ source }}){% endif %}{% endif %}
+</p>
+{% endmacro %}
