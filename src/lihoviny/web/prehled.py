@@ -15,11 +15,12 @@ from fastapi import APIRouter, Depends, Request
 from psycopg.rows import dict_row
 
 from lihoviny.agents.medialni import CHANNELS, TOPICS
-from lihoviny.charts import bar_chart, paired_bar_chart, timeline_chart
-from lihoviny.products import CATEGORIES
-from lihoviny.web.akcni_ceny import cheapest_by_category, current_offers
+from lihoviny.charts import bar_chart, timeline_chart
+from lihoviny.web.akcni_ceny import current_offers
+from lihoviny.web.akcni_ceny_grafy import daily_offers
 from lihoviny.web.common import db, prague_date, templates
-from lihoviny.zadavatel import PORTFOLIO, WATCHED_COMPETITORS
+from lihoviny.web.trendy import tile_sparklines
+from lihoviny.zadavatel import WATCHED_COMPETITORS
 
 router = APIRouter()
 
@@ -133,6 +134,9 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "href": "/regulace",
         },
     ]
+    sparks = tile_sparklines(conn, daily_offers(conn))
+    for tile in tiles:
+        tile["spark"] = sparks.get(tile["label"], "")
     kiqs = [
         {
             "title": "KIQ 1: Kde konkurence rozšiřuje sortiment",
@@ -140,12 +144,6 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "taken_at": sortiment_at,
             "source": "rohlik.cz",
             "charts": [
-                (
-                    novinky_by_category(novinky),
-                    "Kolik Novinek se od začátku sledování objevilo v každé kategorii. "
-                    "Kategorie, kde konkurence uvádí nejvíc novinek, rostou: tam zvažte "
-                    "vlastní novinku nebo obranu stávajícího produktu promo akcí.",
-                ),
                 (
                     novinky_by_manufacturer(novinky),
                     "Novinky podle výrobce. Barevně jsou sledovaní konkurenti "
@@ -159,22 +157,10 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "href": "/akcni-ceny",
             "taken_at": _taken_at(snapshots, "cenovy"),
             "source": "akcniceny.cz",
-            "charts": [
-                (
-                    offers_by_chain(offers),
-                    "Počet akčních cen lihovin, které řetězec právě nabízí. Řetězec "
-                    "s mnoha akcemi je vhodný partner pro promo, ale i místo nejtvrdší "
-                    "cenové konkurence.",
-                ),
-                (
-                    portfolio_vs_offers(offers),
-                    "Modře běžná cena produktu zadavatele, oranžově nejlevnější akční cena "
-                    "konkurence ve stejné kategorii, obojí za litr, aby šly srovnat různé "
-                    "objemy lahví. Čím delší oranžový pruh proti modrému, "
-                    "tím menší cenový tlak; kratší oranžový pruh znamená, že konkurence "
-                    "v akci prodává levněji než zadavatel běžně.",
-                ),
-            ],
+            # Akční ceny podle řetězce a portfolio proti akcím má Brief; Přehled je neopakuje.
+            "charts": [],
+            "elsewhere": "Grafy akčních cen podle řetězce a vašeho portfolia proti nejlevnější "
+            "akci jsou v Briefu, rozhodovací tabulka a všechny akční ceny na stránce Akční ceny.",
         },
         {
             "title": "KIQ 3: O čem a kde konkurence mluví",
@@ -225,13 +211,6 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
     )
 
 
-def novinky_by_category(novinky: list[dict[str, Any]]) -> dict[str, Any]:
-    counts = Counter(CATEGORIES.get(n["category"], n["category"]) for n in novinky)
-    return bar_chart(
-        "Novinky podle kategorie", ("Kategorie", "Novinky"), _top(counts), _count
-    ).as_dict()
-
-
 def novinky_by_manufacturer(novinky: list[dict[str, Any]]) -> dict[str, Any]:
     counts = Counter(n["manufacturer"] or UNKNOWN_MAKER for n in novinky)
     return bar_chart(
@@ -241,33 +220,6 @@ def novinky_by_manufacturer(novinky: list[dict[str, Any]]) -> dict[str, Any]:
         _count,
         highlight=WATCHED_COMPETITORS,
         legend=("sledovaný konkurent", "ostatní výrobci"),
-    ).as_dict()
-
-
-def offers_by_chain(offers: list[dict[str, Any]]) -> dict[str, Any]:
-    counts = Counter(str(o["content"]["chain"]) for o in offers)
-    return bar_chart(
-        "Platné akční ceny podle řetězce", ("Řetězec", "Akční ceny"), _top(counts), _count
-    ).as_dict()
-
-
-def portfolio_vs_offers(offers: list[dict[str, Any]]) -> dict[str, Any]:
-    """Běžná cena produktu z portfolia za litr proti nejnižší akční ceně za litr v kategorii."""
-    cheapest = cheapest_by_category(offers)
-    items: list[tuple[str, float | None, float | None, str]] = []
-    for product in PORTFOLIO:
-        own = float(product.price_per_l)
-        if product.category in cheapest:
-            litre, content = cheapest[product.category]
-            items.append((product.name, own, litre, f"{content['product']}, {content['chain']}"))
-        else:
-            items.append((product.name, own, None, ""))
-    return paired_bar_chart(
-        "Cena za litr: portfolio zadavatele proti nejlevnější akci",
-        ("Produkt", "Běžná cena zadavatele", "Nejlevnější akční cena v kategorii"),
-        items,
-        lambda value: f"{value:,.0f}".replace(",", "\xa0") + " Kč",
-        "v kategorii teď žádná akce",
     ).as_dict()
 
 

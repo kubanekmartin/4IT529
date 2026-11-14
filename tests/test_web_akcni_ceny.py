@@ -57,10 +57,12 @@ def test_akcni_ceny_page_shows_card_price_future_start_and_unknown_alcohol(web, 
 def test_akcni_ceny_page_hides_akcni_ceny_that_ended_before_the_last_snapshot(web, collected):
     html = web.get("/akcni-ceny").text
 
-    # Lidl měl Božkov Original jen do 15. 11., Košík.cz Cointreau do 13. 11.
-    assert "Lidl" not in html
-    assert "Cointreau" not in html
-    assert "Albert" in html
+    # Lidl měl Božkov Original jen do 15. 11., Košík.cz Cointreau do 13. 11. V tabulce platných
+    # nejsou; kalendář akcí a vývoj v čase skončené akce ukazují záměrně.
+    table = main_table(html)
+    assert "Lidl" not in table
+    assert "Cointreau" not in table
+    assert "Albert" in table
 
 
 def test_akcni_cena_without_end_date_stays_on_the_page_while_the_latest_snapshot_has_it(
@@ -221,3 +223,23 @@ def test_invalid_filter_values_are_ignored_and_empty_result_says_so(web, collect
     assert "Filtru neodpovídá žádná akční cena." in html
     # Rady pro zadavatele počítají se všemi akčními cenami, ne jen s vyfiltrovanými.
     assert "▲ vysoký" in html
+
+
+def test_akcni_ceny_page_has_statistics_and_trends_with_explanations(web, collected):
+    html = web.get("/akcni-ceny").text
+
+    for title in [
+        "Rozdělení slev akčních cen",
+        "Slevy po řetězcích",
+        "Cena za litr proti slevě",
+        "Akční ceny: řetězce × kategorie",
+        "Podíl konkurentů na akčních cenách",
+        "Kalendář akcí po řetězcích",
+        "Akční ceny sledovaných konkurentů v čase",
+        "Sleva po týdnech: medián a prostřední polovina",
+    ]:
+        figure = html[html.index(f"<figcaption>{title}</figcaption>") :]
+        figure = figure[: figure.index("</figure>")]
+        assert "<summary>Jak to číst</summary>" in figure, title
+    # Statistiky jsou nad tabulkou, ta zůstává pod nimi.
+    assert html.index("Statistiky akčních cen teď") < html.index('id="tabulka"')

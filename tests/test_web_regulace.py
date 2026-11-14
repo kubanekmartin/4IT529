@@ -125,3 +125,12 @@ def test_regulace_sorts_by_impact_and_ignores_unknown_sort(web, collected):
 
     html = web.get("/regulace?razeni=nesmysl").text
     assert '<strong aria-current="true">Předloženo: nejnovější</strong>' in html
+
+
+def test_regulace_shows_tisky_by_stage_and_impact(web, collected):
+    html = web.get("/regulace").text
+
+    pipeline = html[html.index("<figcaption>Kde ve Sněmovně tisky jsou</figcaption>") :]
+    pipeline = pipeline[: pipeline.index("</figure>")]
+    assert "dopad vysoký" in pipeline and "<summary>Jak to číst</summary>" in pipeline
+    assert "<td>1. čtení</td>" in pipeline

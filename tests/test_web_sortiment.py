@@ -89,3 +89,9 @@ def test_sortiment_says_so_when_agent_has_not_seen_any_products_yet(web):
 
     assert "Zatím žádné novinky" in html
     assert "Zatím žádné produkty" in html
+
+
+def test_sortiment_shows_cumulative_novinky_of_watched_competitors(web, board):
+    html = web.get("/sortiment").text
+
+    assert "<figcaption>Novinky celkem v čase</figcaption>" in html

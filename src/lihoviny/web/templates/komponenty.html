@@ -29,17 +29,19 @@
 {% endmacro %}
 
 {#- Dlaždice s jedním číslem: hodnota, popisek, poznámka (např. stáří dat) a odkaz na detail. -#}
-{% macro stat_tile(value, label, note=none, href=none) %}
+{#- `spark` je volitelná sparkline (lihoviny.charts_extra.sparkline), vývoj za 30 dní. -#}
+{% macro stat_tile(value, label, note=none, href=none, spark="") %}
 <{{ "a" if href else "div" }} class="tile"{% if href %} href="{{ href }}"{% endif %}>
   <span class="value">{{ value }}</span>
   <span class="label">{{ label }}</span>
   {% if note %}<span class="note">{{ note }}</span>{% endif %}
+  {% if spark %}{{ spark | safe }}{% endif %}
 </{{ "a" if href else "div" }}>
 {% endmacro %}
 
 {#- Čas dat: „Data k 17. 11. 2026 7:00:00 (zdroj)“, bez snímku „Zatím bez dat“. -#}
 {% macro freshness(taken_at, source=none) %}
-<p class="freshness">
+<p class="freshness{% if taken_at %} live{% endif %}">
   {% if taken_at %}Data k {{ taken_at | cas }}{% if source %} ({{ source }}){% endif %}{% else %}Zatím bez dat{% if source %} ({{ source }}){% endif %}{% endif %}
 </p>
 {% endmacro %}

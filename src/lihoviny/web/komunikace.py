@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 
 from lihoviny.agents.medialni import CHANNELS, TOPICS
 from lihoviny.web.common import db, templates
+from lihoviny.web.trendy import topics_by_week
 
 router = APIRouter()
 
@@ -38,5 +39,6 @@ def komunikace_page(request: Request, conn: Annotated[psycopg.Connection, Depend
             "last_snapshot": last_snapshot,
             "channels": CHANNELS,
             "topics": TOPICS,
+            "trend": topics_by_week(conn),
         },
     )

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "komponenty.html" import chart_figure %}
 
 {% block title %}Akční ceny{% endblock %}
 
@@ -21,7 +22,7 @@
   .source { font-size: .875rem; }
 
   /* Filtry a řazení tabulky (bez JavaScriptu: formulář GET a odkazy v hlavičce). */
-  .filters { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .5rem 1rem; margin: 0 0 .75rem; }
+  .filters { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: .5rem 1rem; margin: 0 0 .75rem; }
   .filters summary { cursor: pointer; font-weight: 600; font-size: 1.0625rem; }
   .jump { margin: 0 0 1rem; font-weight: 600; }
   .filters .active { color: var(--accent); font-weight: 400; }
@@ -31,13 +32,13 @@
   .filter-grid legend { padding: 0; margin-bottom: .2rem; width: 100%; }
   .filter-grid input, .filter-grid select {
     font: inherit; font-size: .9375rem; color: var(--text); background: var(--bg);
-    border: 1px solid var(--border); border-radius: 4px; padding: .3rem .45rem; min-width: 0;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .3rem .45rem; min-width: 0;
   }
   .filter-grid fieldset input { width: 5.5rem; flex: 1; }
   .filter-actions { display: flex; gap: 1rem; align-items: center; margin-bottom: .25rem; }
   .filter-actions button {
     font: inherit; font-weight: 600; color: var(--surface); background: var(--link);
-    border: 0; border-radius: 4px; padding: .4rem 1rem; cursor: pointer;
+    border: 0; border-radius: var(--radius-sm); padding: .4rem 1rem; cursor: pointer;
   }
   .shown { font-size: .875rem; margin: 0 0 .5rem; }
   .offers th a.sort { color: var(--link); text-decoration: underline dotted; text-underline-offset: 3px; display: inline-flex; gap: .25rem; align-items: baseline; }
@@ -49,7 +50,7 @@
   /* Co to znamená pro vás: tlak na produkty zadavatele a řetězce. */
   .decision {
     background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
-    border-radius: 6px; padding: .25rem 1rem .75rem; margin: 0 0 1.5rem;
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: .25rem 1rem .75rem; margin: 0 0 1.5rem;
   }
   .decision h2 { font-size: 1.25rem; margin: .75rem 0 .25rem; }
   .decision h3 { font-size: 1.05rem; margin: 1.25rem 0 .25rem; }
@@ -90,7 +91,7 @@
     .offers thead { display: none; }
     .offers { background: none; }
     .offers tr {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
       padding: .5rem .75rem; margin-bottom: .75rem;
     }
     .offers td {
@@ -197,6 +198,23 @@
     </ul>
   </details>
 </section>
+
+{% if charts %}
+<section class="kiq" aria-labelledby="statistiky">
+  <h2 id="statistiky">Statistiky akčních cen teď</h2>
+  <p class="freshness">Z {{ total }} akčních cen platných k poslednímu snímku. Najetím myší na značku uvidíte hodnotu.</p>
+  <div class="charts">
+    {% for chart, explanation in charts.now %}{{ chart_figure(chart, explanation) }}{% endfor %}
+  </div>
+</section>
+<section class="kiq" aria-labelledby="vyvoj">
+  <h2 id="vyvoj">Vývoj v čase</h2>
+  <p class="freshness">Z denních snímků cenového agenta; za den platí jeho poslední snímek.</p>
+  <div class="charts">
+    {% for chart, explanation in charts.trend %}{{ chart_figure(chart, explanation) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <h2 class="all-offers" id="tabulka">Všechny platné akční ceny</h2>
 {% if unpaired_count %}

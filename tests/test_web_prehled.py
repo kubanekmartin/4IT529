@@ -65,7 +65,7 @@ def collected(bus, board, clock, raw_dir, make_agent):
 def section(html, heading):
     """Část stránky od nadpisu sekce (odkaz v `<h2>`) po další sekci."""
     start = html.index(f">{heading}</a></h2>")
-    end = html.find("<section>", start)
+    end = html.find("<section", start)
     return html[start : end if end != -1 else len(html)]
 
 
@@ -105,7 +105,7 @@ def test_tiles_show_headline_numbers_and_link_to_detail_pages(web, collected):
     assert "z toho 2 s vysokým dopadem" in tisky
 
 
-def test_every_kiq_has_charts_with_explanation_data_table_and_freshness(web, collected):
+def test_every_kiq_has_freshness_and_charts_or_a_link_to_them(web, collected):
     html = web.get("/prehled").text
 
     for heading, href, source in [
@@ -117,8 +117,16 @@ def test_every_kiq_has_charts_with_explanation_data_table_and_freshness(web, col
         block = section(html, heading)
         assert f'<a href="{href}">{heading}</a>' in html
         assert f"Data k 16. 11. 2026 7:00:00 ({source})" in block
-        assert "<summary>Jak to číst</summary>" in block
-        assert "<summary>Data grafu</summary>" in block
+        if heading.startswith("KIQ 2"):
+            # Grafy akčních cen má Brief; Přehled je neopakuje a odkáže na ně.
+            assert "<svg" not in block and '<a href="/brief">Brief →</a>' in block
+        else:
+            assert "<summary>Jak to číst</summary>" in block
+            assert "<summary>Data grafu</summary>" in block
+
+    # Co je v Briefu, Přehled neopakuje.
+    for title in ["Novinky podle kategorie", "Platné akční ceny podle řetězce", "Cena za litr"]:
+        assert f"<figcaption>{title}" not in html
 
 
 def test_novinky_by_manufacturer_highlights_watched_competitors(web, collected):
@@ -129,23 +137,6 @@ def test_novinky_by_manufacturer_highlights_watched_competitors(web, collected):
     assert "<td>Stock (sledovaný konkurent)</td>" in makers
     assert "<td>Metelka</td>" in makers
     assert 'class="s1"' in makers and 'class="s0"' in makers
-
-
-def test_portfolio_chart_compares_regular_price_with_cheapest_offer_per_litre(web, collected):
-    portfolio = chart(
-        web.get("/prehled").text,
-        "Cena za litr: portfolio zadavatele proti nejlevnější akci",
-    )
-
-    # 179,90 Kč za 0,5 l = 360 Kč za litr.
-    # Nejlevnější akce v kategorii Rum a tuzemák: Božkov Original v Albertu, 240 Kč za litr.
-    assert (
-        "<td>Valnovský tuzemák 37,5 % 0,5 l</td><td>360 Kč</td>"
-        "<td>240 Kč (Božkov Original Tuzemský 37,5% 0,5l, Albert)</td>"
-    ) in portfolio
-    # Gin v ukázkách v akci není.
-    assert "<td>Valnov Dry Gin 40 % 0,7 l</td>" in portfolio
-    assert "v kategorii teď žádná akce" in portfolio
 
 
 def test_tisky_timeline_orders_by_effective_date_and_names_the_impact(web, collected):
@@ -189,7 +180,7 @@ def test_prehled_without_any_data_says_so_everywhere(web):
     assert "zatím bez dat" in tile(html, "sledovaných produktů")
     assert '<span class="value">—</span>' in tile(html, "průměrná sleva")
     assert html.count("Zatím bez dat") == 4
-    assert "bez dat" in chart(html, "Novinky podle kategorie")
+    assert "bez dat" in chart(html, "Novinky podle výrobce")
     assert "zatím žádný" in section(html, "Stav sběru")
 
 

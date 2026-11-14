@@ -29,6 +29,7 @@ BAR_MAX = 78  # nejdelší pruh v % šířky; zbytek patří hodnotě za pruhem
 LEGEND_ROW = 18
 PLOT = 140  # výška plochy čárového grafu
 LABEL_LIMIT = 42
+MAX_X_LABELS = 8  # nejvíc popisků osy x čárového grafu
 
 
 @dataclass(frozen=True)
@@ -209,11 +210,24 @@ def line_chart(
         if len(x_labels) == 1
         else [10 + 80 * i / (len(x_labels) - 1) for i in range(len(x_labels))]
     )
-    for x, label in zip(xs, x_labels, strict=True):
+    # Při mnoha dnech jen každý n-tý popisek (vždy první a poslední), ať se nepřekrývají.
+    step = max(1, -(-len(x_labels) // MAX_X_LABELS))
+    shown = {*range(0, len(x_labels), step), len(x_labels) - 1}
+    before_last = (len(x_labels) - 1) // step * step
+    if before_last != len(x_labels) - 1 and len(x_labels) - 1 - before_last < step / 2:
+        shown.discard(before_last)  # předposlední by se s posledním překryl
+    shown.add(0)
+    for index, (x, label) in enumerate(zip(xs, x_labels, strict=True)):
+        if index not in shown:
+            continue
         parts.append(
             f'<text class="tick" x="{x:.2f}%" y="{plot_bottom + 18}" text-anchor="middle">'
             f"{_e(label)}</text>"
         )
+    # Při mnoha bodech tečky nekreslí (čára by vypadala tečkovaně), jen je nechá pro bublinu.
+    dense = len(x_labels) > 14
+    radius = 6 if dense else 4
+    hidden = ' fill-opacity="0" stroke-opacity="0"' if dense else ""
     for number, (name, values) in enumerate(series, start=1):
         points = [(x, _y(v, top, plot_bottom)) for x, v in zip(xs, values, strict=True)]
         for (x1, y1), (x2, y2) in zip(points, points[1:], strict=False):
@@ -223,7 +237,8 @@ def line_chart(
             )
         for (x, y), label, value in zip(points, x_labels, values, strict=True):
             parts.append(
-                f'<circle class="s{number}" cx="{x:.2f}%" cy="{y:.1f}" r="4" stroke-width="2">'
+                f'<circle class="s{number}" cx="{x:.2f}%" cy="{y:.1f}" r="{radius}" '
+                f'stroke-width="2"{hidden}>'
                 f"<title>{_e(name)}, {_e(label)}: {_e(fmt(value))}</title></circle>"
             )
     rows = [[label, *(fmt(values[i]) for _, values in series)] for i, label in enumerate(x_labels)]

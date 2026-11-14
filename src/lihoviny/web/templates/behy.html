@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "komponenty.html" import chart_figure %}
 
 {% block title %}Běhy{% endblock %}
 
@@ -6,7 +7,7 @@
 <style>
   .warnings {
     background: var(--surface); border: 1px solid var(--failure);
-    border-left-width: 4px; border-radius: 6px; padding: .75rem 1rem; margin: 0 0 1.5rem;
+    border-left-width: 4px; border-radius: var(--radius); box-shadow: var(--shadow); padding: .75rem 1rem; margin: 0 0 1.5rem;
   }
   .warnings h2 { margin: 0 0 .25rem; font-size: 1.125rem; color: var(--failure); }
   .warnings ul { margin: 0; padding-left: 1.25rem; }
@@ -15,7 +16,7 @@
   .behy { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
   .beh {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: .75rem 1rem;
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: .75rem 1rem;
   }
   .beh-meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: baseline; }
   .state { font-weight: 600; }
@@ -54,6 +55,8 @@
   </ul>
 </section>
 {% endif %}
+
+{% if trend %}<div class="charts wide">{{ chart_figure(trend[0], trend[1]) }}</div>{% endif %}
 
 <h2>Poslední běhy</h2>
 {% if behy %}

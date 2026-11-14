@@ -11,7 +11,7 @@
 
   /* Diagram je v px uživatelských jednotek; pod 36rem se neztenčí, ale posouvá ve vlastním boxu. */
   .diagram {
-    margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
   }
   .diagram-scroll { overflow-x: auto; padding: .75rem; }
   .diagram svg {
@@ -38,7 +38,7 @@
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   }
   .agent {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
     padding: .75rem 1rem;
   }
   .agent h3 {
@@ -57,7 +57,7 @@
   .kinds { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
   .kind {
     background: var(--surface); border: 1px solid var(--border);
-    border-left: 4px solid var(--kind-color); border-radius: 6px; padding: .75rem 1rem;
+    border-left: 4px solid var(--kind-color); border-radius: var(--radius); box-shadow: var(--shadow); padding: .75rem 1rem;
   }
   .kind.REQUEST { --kind-color: var(--request); }
   .kind.INFORM { --kind-color: var(--inform); }

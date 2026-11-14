@@ -22,6 +22,7 @@ from psycopg.rows import dict_row
 from lihoviny.agents.analyticky import LISTING_CATEGORIES
 from lihoviny.clock import PRAGUE
 from lihoviny.products import CATEGORIES
+from lihoviny.web.akcni_ceny_grafy import calendar_offers, daily_offers, offer_charts
 from lihoviny.web.common import czech_date, db, templates
 from lihoviny.zadavatel import PORTFOLIO, WATCHED_COMPETITORS
 
@@ -57,6 +58,14 @@ UNPAIRED = "nesparovano"
 @router.get("/akcni-ceny")
 def akcni_ceny_page(request: Request, conn: Annotated[psycopg.Connection, Depends(db)]):
     snapshot, offers = current_offers(conn)
+    today = snapshot["taken_at"].astimezone(PRAGUE).date() if snapshot else None
+    charts = (
+        offer_charts(
+            offers, daily_offers(conn), calendar_offers(conn, today), today, offer_category
+        )
+        if today
+        else None
+    )
     params = {key: value.strip() for key, value in request.query_params.items() if value.strip()}
     shown = sort_offers(filter_offers(offers, params), params)
     sort, direction = _sort_param(params)
@@ -88,6 +97,7 @@ def akcni_ceny_page(request: Request, conn: Annotated[psycopg.Connection, Depend
             "chains": chains_summary(offers),
             "watched": WATCHED_COMPETITORS,
             "high_pressure": round(HIGH_PRESSURE * 100),
+            "charts": charts,
         },
     )
 

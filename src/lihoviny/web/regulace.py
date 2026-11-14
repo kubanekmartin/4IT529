@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request
 from psycopg.rows import dict_row
 
 from lihoviny.web.common import czech_date, db, templates
+from lihoviny.web.trendy import tisky_pipeline
 
 router = APIRouter()
 
@@ -56,6 +57,7 @@ def regulace_page(
             "snapshot": snapshot,
             "tisky": sort_tisky(tisky, sort),
             "sort": sort,
+            "trend": tisky_pipeline([t["content"] for t in tisky]) if tisky else None,
             "sorts": {key: label for key, (label, _, _) in SORTS.items()},
         },
     )

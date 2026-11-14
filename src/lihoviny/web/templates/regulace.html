@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "komponenty.html" import chart_figure %}
 
 {% block title %}Regulace{% endblock %}
 
@@ -6,7 +7,7 @@
 <style>
   .tisky { display: grid; gap: .75rem; margin: 0 0 1.5rem; }
   .tisk {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
     padding: .75rem 1rem;
   }
   .tisk header {
@@ -55,6 +56,7 @@
   ({{ snapshot.item_count }} tisků tohoto volebního období).
 </p>
 
+{% if trend %}<div class="charts wide">{{ chart_figure(trend[0], trend[1]) }}</div>{% endif %}
 {% if tisky %}
 <nav class="sorting" aria-label="Řazení tisků">
   <span class="muted">Řadit:</span>
