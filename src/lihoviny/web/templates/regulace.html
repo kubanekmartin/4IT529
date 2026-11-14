@@ -30,6 +30,10 @@
   .tisk dd { margin: 0; }
   .tisk .note { color: var(--muted); }
   .source { font-size: .875rem; }
+  .sorting { display: flex; flex-wrap: wrap; gap: .25rem .5rem; align-items: baseline; margin: 0 0 .75rem; font-size: .875rem; }
+  .sorting a, .sorting strong { border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem; }
+  .sorting a { text-decoration: none; }
+  .sorting strong { background: var(--link); border-color: var(--link); color: var(--surface); }
 
   /* Na úzkém displeji jdou popisky nad hodnoty, aby dlouhý stav nezúžil sloupec. */
   @media (max-width: 30rem) {
@@ -52,6 +56,12 @@
 </p>
 
 {% if tisky %}
+<nav class="sorting" aria-label="Řazení tisků">
+  <span class="muted">Řadit:</span>
+  {% for key, label in sorts.items() %}
+  {% if key == sort %}<strong aria-current="true">{{ label }}</strong>{% else %}<a href="/regulace?razeni={{ key }}">{{ label }}</a>{% endif %}
+  {% endfor %}
+</nav>
 <div class="tisky">
   {% for tisk in tisky %}
   {% set c = tisk.content %}
