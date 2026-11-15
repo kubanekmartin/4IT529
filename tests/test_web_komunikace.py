@@ -86,3 +86,9 @@ def test_komunikace_without_clanky_says_so(web):
 
     assert page.status_code == 200
     assert "Zatím žádné články o lihovinách." in page.text
+
+
+def test_komunikace_shows_topics_by_week(web, board):
+    html = web.get("/komunikace").text
+
+    assert "<figcaption>Témata článků po týdnech</figcaption>" in html

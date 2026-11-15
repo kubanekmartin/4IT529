@@ -12,6 +12,7 @@ from psycopg.rows import class_row
 from lihoviny.board import BEH_COLUMNS, ZADANI_COLUMNS, Beh, Zadani
 from lihoviny.bus import Kind
 from lihoviny.web.common import czech_count, db, prague_time, templates
+from lihoviny.web.trendy import collection_calendar
 
 router = APIRouter()
 
@@ -65,7 +66,12 @@ def behy_page(request: Request, conn: Annotated[psycopg.Connection, Depends(db)]
     return templates.TemplateResponse(
         request,
         "behy.html",
-        {"behy": views, "warnings": warnings, "kind_labels": KIND_LABELS},
+        {
+            "behy": views,
+            "warnings": warnings,
+            "kind_labels": KIND_LABELS,
+            "trend": collection_calendar(conn),
+        },
     )
 
 

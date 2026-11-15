@@ -25,6 +25,12 @@ class PortfolioProduct:
     regular_price: Decimal
 
     @property
+    def price_per_l(self) -> Decimal:
+        return (self.regular_price / (Decimal(self.volume_ml) / 1000)).quantize(
+            Decimal("0.01"), ROUND_HALF_UP
+        )
+
+    @property
     def price_per_l_ethanol(self) -> Decimal:
         ethanol_l = Decimal(self.volume_ml) / 1000 * self.abv / 100
         return (self.regular_price / ethanol_l).quantize(Decimal("0.01"), ROUND_HALF_UP)

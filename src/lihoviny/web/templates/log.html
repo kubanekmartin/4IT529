@@ -16,7 +16,7 @@
   }
   .message {
     background: var(--surface); border: 1px solid var(--border);
-    border-left: 4px solid var(--kind-color); border-radius: 6px; padding: .75rem 1rem;
+    border-left: 4px solid var(--kind-color); border-radius: var(--radius); box-shadow: var(--shadow); padding: .75rem 1rem;
     min-width: 0;
   }
   .message.REQUEST { --kind-color: var(--request); }
@@ -28,7 +28,7 @@
   .route { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
   .details { font-size: .875rem; }
   pre {
-    margin: .5rem 0 0; padding: .5rem; overflow-x: auto; border-radius: 4px;
+    margin: .5rem 0 0; padding: .5rem; overflow-x: auto; border-radius: var(--radius-sm);
     background: var(--bg); font-size: .875rem; white-space: pre-wrap; word-break: break-word;
   }
 </style>

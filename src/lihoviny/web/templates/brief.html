@@ -4,22 +4,17 @@
 
 {% block head %}
 <style>
-  /* Barvy řad v grafech (validované pro barvoslepost, světlý i tmavý režim). */
-  :root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; }
-  @media (prefers-color-scheme: dark) {
-    :root { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; }
-  }
   h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; }
   h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
   .gaps {
     background: var(--surface); border: 1px solid var(--failure);
-    border-left-width: 4px; border-radius: 6px; padding: .75rem 1rem; margin: 1rem 0;
+    border-left-width: 4px; border-radius: var(--radius); box-shadow: var(--shadow); padding: .75rem 1rem; margin: 1rem 0;
   }
   .gaps h2 { margin: 0 0 .25rem; font-size: 1.125rem; color: var(--failure); }
   .gaps ul { margin: 0 0 .5rem; padding-left: 1.25rem; }
   .gaps p { margin: 0; }
-  .kiq, .chart {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  .kiq {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
     padding: .75rem 1rem; margin: 0 0 .75rem;
   }
   .failure { color: var(--failure); font-weight: 600; margin: 0 0 .5rem; }
@@ -33,32 +28,11 @@
     border: 1px solid var(--accent); border-radius: 999px; color: var(--accent);
   }
   .older { border-left: 4px solid var(--query); padding-left: .75rem; }
-  .charts { display: grid; gap: .75rem; }
-  @media (min-width: 56rem) { .charts { grid-template-columns: 1fr 1fr; } }
-  .chart { margin: 0; min-width: 0; }
-  .chart figcaption { font-weight: 600; margin-bottom: .5rem; }
-  .graf { display: block; overflow: visible; }
-  .graf .label { fill: var(--text); }
-  .graf .value { fill: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .graf .tick { fill: var(--muted); font-size: 11px; }
-  .graf .grid { stroke: var(--border); }
-  .graf circle { stroke: var(--surface); }
-  .graf rect.s1, .graf circle.s1 { fill: var(--series-1); }
-  .graf rect.s2, .graf circle.s2 { fill: var(--series-2); }
-  .graf rect.s3, .graf circle.s3 { fill: var(--series-3); }
-  .graf rect.s4, .graf circle.s4 { fill: var(--series-4); }
-  .graf line.s1 { stroke: var(--series-1); }
-  .graf line.s2 { stroke: var(--series-2); }
-  .graf line.s3 { stroke: var(--series-3); }
-  .graf line.s4 { stroke: var(--series-4); }
-  .chart details { margin-top: .5rem; font-size: .875rem; }
-  .chart table { border-collapse: collapse; width: 100%; margin-top: .25rem; }
-  .chart th, .chart td { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid var(--border); }
-  .chart th { color: var(--muted); font-weight: 600; }
 </style>
 {% endblock %}
 
 {% block content %}
+{% from "komponenty.html" import chart_figure %}
 {% macro source_links(sources) %}
 <p class="sources">Zdroj:
   {% for source in sources %}{% if source.url %}<a href="{{ source.url }}" rel="noopener">{{ source.label }}</a>{% else %}{{ source.label }}{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}
@@ -135,21 +109,7 @@
 <h2>Grafy</h2>
 <div class="charts">
   {% for chart in brief.charts %}
-  <figure class="chart">
-    <figcaption>{{ chart.title }}</figcaption>
-    {{ chart.svg | safe }}
-    {% if chart.rows %}
-    <details>
-      <summary>Data grafu</summary>
-      <table>
-        <thead><tr>{% for column in chart.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in chart.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
-        </tbody>
-      </table>
-    </details>
-    {% endif %}
-  </figure>
+  {{ chart_figure(chart) }}
   {% endfor %}
 </div>
 {% else %}

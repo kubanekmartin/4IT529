@@ -14,6 +14,7 @@ from lihoviny.board import PRODUCT_COLUMNS, Product
 from lihoviny.products import CATEGORIES
 from lihoviny.web.akcni_ceny import current_offers
 from lihoviny.web.common import db, templates
+from lihoviny.web.trendy import novinky_cumulative
 
 router = APIRouter()
 
@@ -61,5 +62,6 @@ def sortiment_page(request: Request, conn: Annotated[psycopg.Connection, Depends
             "categories": CATEGORIES,
             "product_count": len(products),
             "last_snapshot": last_snapshot,
+            "trend": novinky_cumulative(conn),
         },
     )

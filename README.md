@@ -10,14 +10,15 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 
 | Stránka | Co |
 | --- | --- |
-| `/brief` | aktuální Brief (na něj vede `/`), `/brief/archiv` starší Briefy |
-| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny |
-| `/akcni-ceny` | KIQ 2: akční ceny lihovin a RTD z akcniceny.cz s kategorií, cenou za litr a za litr etanolu |
+| `/prehled` | Přehled (na něj vede `/`): hlavní čísla s vývojem za 30 dní, grafy po KIQ s vysvětlením (bez grafů, které má Brief) a stav sběru |
+| `/brief` | aktuální Brief, `/brief/archiv` starší Briefy |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny; Novinky sledovaných konkurentů v čase |
+| `/akcni-ceny` | KIQ 2: cenový tlak na produkty zadavatele („Co to znamená pro vás“), statistiky a vývoj akčních cen (slevy, řetězce, kalendář akcí) a tabulka akčních cen z akcniceny.cz s kategorií a cenou za litr, filtrem a řazením podle sloupců |
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
-| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím |
-| `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti |
+| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím; témata po týdnech |
+| `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti, řazené podle data předložení nebo dopadu; tisky podle fáze projednávání |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) po konverzacích |
-| `/behy` | běhy řídicího agenta a varování při Selhání nebo prázdném snímku |
+| `/behy` | běhy řídicího agenta, kalendář spolehlivosti sběru po dnech a varování při Selhání nebo prázdném snímku |
 | `/architektura` | agenti, jejich role a zdroje, diagram komunikace, druhy zpráv a sdílená tabule |
 
 ## Spuštění celého systému
@@ -224,7 +225,7 @@ ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
   řídicí agent přikládá k Zadání) zkusí doplnit Dotazem (viz Smyčka Dotazů); co se doplnit
   nepodařilo, uvede v rámečku nahoře i u dotčené KIQ.
 - Grafy (akční ceny podle řetězce, akční ceny sledovaných konkurentů podle dne, cena za litr
-  etanolu portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
+  portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
   agent sám z nálezů a ukládá je s Briefem jako SVG; web je vloží bez JavaScriptu. Pod každým
   grafem je tabulka s daty.
 - Portfolio zadavatele (návrh k odsouhlasení týmem) a sledovaní konkurenti jsou

@@ -1,5 +1,8 @@
 """Stránka Regulace přes HTTP: nálezy zapíše regulatorní agent z ukázky otevřených dat."""
 
+import re
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 from test_regulatorni import (
@@ -90,3 +93,44 @@ def test_regulace_page_says_so_before_first_snapshot(web):
     html = web.get("/regulace").text
 
     assert "Regulatorní agent zatím nestáhl data Sněmovny." in html
+
+
+def submitted_dates(html):
+    """Data předložení tisků v pořadí kartiček (bez data jako None)."""
+    dates = re.findall(r"<dt>Předloženo</dt><dd>([^<]+)</dd>", html)
+    return [None if d == "—" else date(*map(int, reversed(d.split(". ")))) for d in dates]
+
+
+def test_regulace_sorts_by_submission_date_newest_first_by_default(web, collected):
+    html = web.get("/regulace").text
+
+    dates = submitted_dates(html)
+    known = [d for d in dates if d is not None]
+    assert len(known) >= 2 and known == sorted(known, reverse=True)
+    assert dates[len(known) :] == [None] * (len(dates) - len(known))
+    assert '<strong aria-current="true">Předloženo: nejnovější</strong>' in html
+    assert 'href="/regulace?razeni=dopad"' in html
+
+    oldest = [
+        d for d in submitted_dates(web.get("/regulace?razeni=predlozeno-nejstarsi").text) if d
+    ]
+    assert oldest == sorted(known)
+
+
+def test_regulace_sorts_by_impact_and_ignores_unknown_sort(web, collected):
+    levels = re.findall(
+        r"dopad (vysoký|střední|nízký)</span>", web.get("/regulace?razeni=dopad").text
+    )
+    assert levels == sorted(levels, key=["vysoký", "střední", "nízký"].index)
+
+    html = web.get("/regulace?razeni=nesmysl").text
+    assert '<strong aria-current="true">Předloženo: nejnovější</strong>' in html
+
+
+def test_regulace_shows_tisky_by_stage_and_impact(web, collected):
+    html = web.get("/regulace").text
+
+    pipeline = html[html.index("<figcaption>Kde ve Sněmovně tisky jsou</figcaption>") :]
+    pipeline = pipeline[: pipeline.index("</figure>")]
+    assert "dopad vysoký" in pipeline and "<summary>Jak to číst</summary>" in pipeline
+    assert "<td>1. čtení</td>" in pipeline

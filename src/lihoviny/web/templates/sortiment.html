@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "komponenty.html" import chart_figure %}
 
 {% block title %}Sortiment{% endblock %}
 
@@ -7,7 +8,7 @@
   h2 { font-size: 1.2rem; margin: 1.75rem 0 .75rem; }
   .items { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
   .item {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
     padding: .6rem .9rem; overflow-wrap: anywhere;
   }
   .item.novinka { border-left: 4px solid var(--accent); }
@@ -22,7 +23,7 @@
     white-space: nowrap;
   }
   details.category {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
     margin-bottom: .5rem;
   }
   details.category > summary {
@@ -36,7 +37,7 @@
   details.category[open] > summary { border-bottom: 1px solid var(--border); }
   .count { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
   details.category .items { gap: 0; }
-  details.category .item { border: 0; border-radius: 0; border-bottom: 1px solid var(--border); }
+  details.category .item { border: 0; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--border); }
   details.category .item:last-child { border-bottom: 0; }
   .empty { margin: 0; padding: .6rem .9rem; }
   .with-offers { color: var(--accent); font-weight: 600; margin-left: .5rem; }
@@ -71,6 +72,8 @@
   sledujeme {{ product_count }} produktů.
   {% endif %}
 </p>
+
+{% if trend %}<div class="charts wide">{{ chart_figure(trend[0], trend[1]) }}</div>{% endif %}
 
 <h2>Novinky</h2>
 {% if novinky %}

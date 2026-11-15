@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "komponenty.html" import chart_figure %}
 
 {% block title %}Komunikace{% endblock %}
 
@@ -6,7 +7,7 @@
 <style>
   .items { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
   .item {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
     padding: .75rem .9rem; overflow-wrap: anywhere;
   }
   .item h2 { font-size: 1.05rem; line-height: 1.35; margin: 0; }
@@ -34,6 +35,8 @@
   Poslední snímek {{ last_snapshot.taken_at | cas }} ({{ last_snapshot.item_count }} článků ve výpisu).
   {% endif %}
 </p>
+
+{% if trend %}<div class="charts wide">{{ chart_figure(trend[0], trend[1]) }}</div>{% endif %}
 
 {% if clanky %}
 <ol class="items">

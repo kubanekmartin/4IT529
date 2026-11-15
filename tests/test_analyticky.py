@@ -313,15 +313,13 @@ def test_brief_has_four_svg_charts_computed_from_findings_each_with_a_data_table
     assert '<th scope="col">Stock</th><th scope="col">Rudolf Jelínek</th>' in days
     assert "<td>16. 11.</td><td>1</td><td>0</td><td>0</td><td>0</td>" in days
     assert "<td>17. 11.</td><td>1</td><td>0</td><td>0</td><td>0</td>" in days
-    portfolio = chart(
-        html, "Cena za litr etanolu: portfolio zadavatele a nejnižší akční cena v kategorii"
-    )
+    portfolio = chart(html, "Cena za litr: portfolio zadavatele a nejnižší akční cena v kategorii")
     assert (
-        "<td>Valnovský bylinný likér 35 % 0,5 l</td><td>1\xa0257 Kč</td>"
-        "<td>970 Kč (Fernet Stock 0,5l, BILLA)</td>"
+        "<td>Valnovský bylinný likér 35 % 0,5 l</td><td>440 Kč</td>"
+        "<td>340 Kč (Fernet Stock 0,5l, BILLA)</td>"
     ) in portfolio
-    assert "<td>Valnov Dry Gin 40 % 0,7 l</td><td>1\xa0607 Kč</td>" in portfolio
-    assert "bez akční ceny se známým obsahem alkoholu" in portfolio
+    assert "<td>Valnov Dry Gin 40 % 0,7 l</td><td>643 Kč</td>" in portfolio
+    assert "bez akční ceny se známým objemem" in portfolio
     assert "<td>Rum a tuzemák</td><td>1</td>" in chart(html, "Novinky podle kategorie")
 
 
@@ -477,6 +475,28 @@ def test_competitors_chart_says_bez_dat_when_no_snapshot_shows_a_watched_competi
     assert "<td>" not in days
 
 
+def test_competitors_chart_shows_bars_with_discount_and_chains_for_a_single_day(
+    bus, board, make_agent, web
+):
+    record_novinka(board, name="Fernet Stock Citrus", brand="Fernet Stock", manufacturer="Stock")
+    record_akcni_ceny(
+        board,
+        ("Fernet Stock 0,5l", "BILLA", 169.9, 30, 969.71),
+        ("Fernet Stock Citrus 0,5l", "Albert", 179.9, 20, 1027.43),
+    )
+    send_brief_zadani(bus, board)
+
+    make_agent(Analyticky, llm=FakeLlm(brief_text())).process_pending()
+
+    html = web.get("/brief").text
+    assert "Akční ceny sledovaných konkurentů podle dne" not in html
+    day = chart(html, "Akční ceny sledovaných konkurentů 16. 11.")
+    assert "<circle" not in day
+    assert '<th scope="col">Typická sleva</th><th scope="col">Řetězce</th>' in day
+    assert "<td>Stock</td><td>2</td><td>25 %</td><td>Albert, BILLA</td>" in day
+    assert "<td>Jan Becher</td><td>0</td><td>—</td><td>—</td>" in day
+
+
 def test_web_says_so_when_no_brief_exists_yet(web):
     page = web.get("/brief")
 
@@ -484,7 +504,7 @@ def test_web_says_so_when_no_brief_exists_yet(web):
     assert "Zatím žádný Brief." in page.text
     assert "Zatím žádný Brief." in web.get("/brief/archiv").text
     assert web.get("/brief/1").status_code == 404
-    assert web.get("/", follow_redirects=False).headers["location"] == "/brief"
+    assert web.get("/", follow_redirects=False).headers["location"] == "/prehled"
 
 
 def test_brief_states_selhani_of_the_last_collection_explicitly(bus, board, make_agent, web):
