@@ -4,6 +4,7 @@
 `den2/` jejich upravené kopie pro další snímek (vyprodaný produkt, nové produkty ve výpisu).
 """
 
+import logging
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -415,3 +416,37 @@ def test_alkohol_cz_outage_does_not_fail_the_zadani(bus, board, clock, raw_dir, 
 
     assert reply.kind is Kind.INFORM
     assert board.snapshot(reply.content["snapshot_id"]).source == "rohlik.cz"
+
+
+def test_product_or_brand_left_out_by_llm_is_skipped_not_failure(
+    bus, board, clock, raw_dir, make_agent, caplog
+):
+    """LLM vynechá kategorii jednoho produktu z alkohol.cz a výrobce jedné Značky: produkt
+    se přeskočí a zaloguje, Značka zůstane bez výrobce, zbytek Zadání (i Rohlík) proběhne."""
+    routes = {url: FIXTURES / "den1" / f"{page}.html" for page, url in PAGES.items()}
+    routes[ALKOHOL_CZ_NOVINKY] = FIXTURES.parent / "alkohol_cz" / "novinky.html"
+    fetcher = FakeFetcher(routes, raw_dir=raw_dir, clock=clock)
+    classification, manufacturers = ALKOHOL_CZ_LLM
+    llm = FakeLlm(
+        {
+            "products": BASELINE_CLASSIFICATION["products"]
+            + [p for p in classification["products"] if p["brand"] != "Dolská"]
+        },
+        {
+            "brands": BASELINE_MANUFACTURERS["brands"]
+            + [b for b in manufacturers["brands"] if b["brand"] != "Skrewball"]
+        },
+    )
+    agent = make_agent(Sortimentni, fetcher=fetcher, llm=llm)
+    caplog.set_level(logging.WARNING)
+
+    reply = run_zadani(bus, agent)
+
+    assert reply.kind is Kind.INFORM
+    products = {p.name: p for p in board.products()}
+    assert "Božkov Modrá 19 % obj." in products  # Rohlík
+    assert "Bache Gabrielsen Cognac VS 0,7l 40%" in products
+    assert not any(p.brand == "Dolská" for p in products.values())
+    assert "alkohol.cz" in caplog.text and "Dolská" in caplog.text
+    skrewball = next(p for p in products.values() if p.brand == "Skrewball")
+    assert skrewball.manufacturer is None
