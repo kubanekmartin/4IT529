@@ -6,7 +6,7 @@ Selhání; výpadek ostatních agent jen zaloguje a snímek vznikne bez nich. Me
 píšou o celém mediálním trhu, proto LLM dostane jen jejich články s lihovinami v textu
 (`_SPIRITS`); ostatní agent zapíše jako viděné a nerelevantní.
 
-Na Zadání načte ze zboziaprodej.cz posledních 30 článků i s textem. Každý článek, který
+Na Zadání načte ze zboziaprodej.cz posledních 100 článků i s textem. Každý článek, který
 ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách, a u relevantního výrobce,
 značky, kanál, téma a shrnutí ve dvou větách. Nález vznikne jen z relevantního článku.
 
@@ -45,8 +45,10 @@ log = logging.getLogger(__name__)
 
 SOURCE = "zboziaprodej.cz"
 BASE_URL = "https://www.zboziaprodej.cz"
-# Posledních 30 článků (zhruba dva týdny) jen s poli, která agent čte.
-POSTS_URL = f"{BASE_URL}/wp-json/wp/v2/posts?per_page=30&_fields=id,date_gmt,title,content"
+# Posledních 100 článků (zhruba dva měsíce; víc WordPress na stránku nevydá) jen s poli, která
+# agent čte. O lihovinách píše Zboží&Prodej jen párkrát za měsíc, 30 článků (tři týdny) jich
+# často nezachytilo žádný. Starší článek LLM posoudí jen jednou, pak už je ve snímku.
+POSTS_URL = f"{BASE_URL}/wp-json/wp/v2/posts?per_page=100&_fields=id,date_gmt,title,content"
 MEDIAR_URL = "https://www.mediar.cz"
 # Mediář vydá kolem deseti článků denně: 50 je zhruba pět dní.
 MEDIAR_POSTS_URL = f"{MEDIAR_URL}/wp-json/wp/v2/posts?per_page=50&_fields=id,date_gmt,title,content"

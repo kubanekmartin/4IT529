@@ -144,12 +144,12 @@ zaloguje a snímek vznikne bez něj; výpadek zboziaprodej.cz je Selhání. Nál
 U MediaGuru nemá článek číselné ID: agent si pamatuje otisk odkazu a když adresa obsahuje
 jméno osoby, nález odkáže jen na web zdroje.
 
-Ze zboziaprodej.cz jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
+Ze zboziaprodej.cz jedním požadavkem na WordPress REST API načte posledních 100 článků (zhruba dva měsíce) i s textem (RSS by neslo
 jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
 a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
 vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže
-LLM žádný článek neposuzuje dvakrát. První snímek tak udělá nálezy ze všech asi 30 článků
-výpisu (zhruba dvou týdnů), další už jen z nových. Posouzený článek se zapíše hned; když LLM u některého
+LLM žádný článek neposuzuje dvakrát. První snímek tak posoudí všech 100 článků
+výpisu, další už jen nové. Posouzený článek se zapíše hned; když LLM u některého
 článku selže, ostatní zůstanou zapsané a příští Zadání posoudí jen ty zbylé (Selhání je
 odpovědí, jen když LLM selže u všech). Potřebuje `ANTHROPIC_API_KEY`:
 
