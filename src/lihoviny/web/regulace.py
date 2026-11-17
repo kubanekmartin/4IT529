@@ -1,4 +1,5 @@
-"""Stránka Regulace (KIQ 4): sněmovní tisky, které se podle regulatorního agenta týkají lihovin.
+"""Stránka Regulace (KIQ 4): sněmovní tisky a zprávy úřadů, které se podle regulatorního agenta
+týkají lihovin.
 
 Zdroj se uvádí, jak to chtějí podmínky otevřených dat Sněmovny: zdroj dat a datum zpracování,
 tedy datum posledního snímku regulatorního agenta.

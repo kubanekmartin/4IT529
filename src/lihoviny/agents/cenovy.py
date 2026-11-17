@@ -27,7 +27,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
@@ -107,7 +107,7 @@ class Offer:
 
 class Cenovy(Agent):
     name = "cenovy"
-    role = "sběrný agent KIQ 2: akční ceny lihovin z akcniceny.cz"
+    role = "sběrný agent KIQ 2: akční ceny lihovin z akcniceny.cz a kupi.cz"
     fetch_delay = 1.0  # robots.txt akcniceny.cz: Crawl-delay: 1
 
     def handle_request(self, request: Message) -> dict[str, Any]:
@@ -375,8 +375,12 @@ def _money(value: Decimal) -> float:
 
 
 def _czech_number(text: str) -> Decimal | None:
+    """Česká cena jako číslo; None, když cena chybí nebo není číslem (např. „od 99,90“)."""
     digits = "".join(text.split()).replace(",", ".")
-    return Decimal(digits) if digits else None
+    try:
+        return Decimal(digits) if digits else None
+    except InvalidOperation:
+        return None
 
 
 def _date_after(label: str, part: str) -> date | None:
@@ -450,6 +454,13 @@ def _parse_kupi_product(block: str, page: FetchResult) -> list[Offer]:
         flyer = re.search(r'href="(/letak/[^"]+)"', row)
         value = _czech_number(html.unescape(price.group(1)).replace("Kč", ""))
         if value is None:
+            log.warning(
+                "%s: nečitelná cena %r u %s, nabídka %r vynechána",
+                KUPI_SOURCE,
+                price.group(1),
+                chain,
+                title,
+            )
             continue
         valid_from, valid_until = _kupi_validity(row, page.fetched_at.date())
         offers.append(

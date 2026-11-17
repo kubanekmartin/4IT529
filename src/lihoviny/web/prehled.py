@@ -8,6 +8,7 @@ byl, a čas dat u dlaždice to přizná (stejně jako stránka Akční ceny).
 
 from collections import Counter
 from datetime import date, datetime, timedelta
+from statistics import median
 from typing import Annotated, Any
 
 import psycopg
@@ -65,12 +66,10 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             FROM findings WHERE kiq = 3 AND type = 'clanek'
             """
         ).fetchall()
-        tisky = [
-            row["content"]
-            for row in cursor.execute(
-                "SELECT content FROM findings WHERE kiq = 4 AND type = 'snemovni_tisk'"
-            ).fetchall()
-        ]
+        regulace = cursor.execute(
+            "SELECT type, content FROM findings"
+            " WHERE kiq = 4 AND type IN ('snemovni_tisk', 'uredni_zprava')"
+        ).fetchall()
         replies = {
             row["sender"]: row
             for row in cursor.execute(
@@ -94,7 +93,9 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
         if isinstance(o["content"].get("discount_percent"), int | float)
     ]
     chains = {o["content"]["chain"] for o in offers}
-    high_impact = sum(t.get("impact_level") == "vysoký" for t in tisky)
+    tisky = [r["content"] for r in regulace if r["type"] == "snemovni_tisk"]
+    # Dopad odhaduje LLM u tisků i zpráv úřadů, dlaždice tedy počítá obojí jako stránka Regulace.
+    high_impact = sum(r["content"].get("impact_level") == "vysoký" for r in regulace)
 
     tiles = [
         {
@@ -116,8 +117,8 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "href": "/akcni-ceny",
         },
         {
-            "value": f"{round(sum(discounts) / len(discounts))} %" if discounts else "—",
-            "label": "průměrná sleva",
+            "value": f"{round(median(discounts))} %" if discounts else "—",
+            "label": "medián slevy",
             "note": f"z {len(discounts)} akčních cen se slevou" if discounts else "bez slev",
             "href": "/akcni-ceny",
         },
@@ -128,8 +129,8 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "href": "/komunikace",
         },
         {
-            "value": len(tisky),
-            "label": "sněmovních tisků o alkoholu",
+            "value": len(regulace),
+            "label": "sněmovních tisků a zpráv úřadů o alkoholu",
             "note": f"z toho {high_impact} s vysokým dopadem",
             "href": "/regulace",
         },

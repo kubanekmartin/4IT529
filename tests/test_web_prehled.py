@@ -1,6 +1,6 @@
 """Stránka Přehled přes HTTP: dlaždice, grafy po KIQ a stav sběru z nálezů na tabuli.
 
-Akční ceny, články a sněmovní tisky zapíší skuteční agenti z uložených ukázek (jako
+Akční ceny, články, sněmovní tisky a zprávy úřadů zapíší skuteční agenti z uložených ukázek (jako
 v testech jednotlivých stránek), produkty a Novinky test (jako sortimentní agent).
 """
 
@@ -10,7 +10,7 @@ from test_cenovy import make_cenovy
 from test_cenovy import send_zadani as send_cenovy
 from test_medialni import STOCK_MODERNIZUJE, irrelevant, make_medialni
 from test_medialni import send_zadani as send_medialni
-from test_regulatorni import BASELINE_ANSWER, make_regulatorni
+from test_regulatorni import BASELINE_ANSWER, assessment, make_regulatorni, with_offices
 from test_regulatorni import send_zadani as send_regulatorni
 from test_web_sortiment import add_product
 
@@ -27,7 +27,7 @@ def web(web_database_url):
 @pytest.fixture
 def collected(bus, board, clock, raw_dir, make_agent):
     """Snímky všech čtyř sběrných agentů 16. 11. 2026: dvě Novinky (Stock a Metelka),
-    akční ceny z akcniceny.cz, článek o Stocku a sněmovní tisky."""
+    akční ceny z akcniceny.cz, článek o Stocku, sněmovní tisky a zpráva MF s vysokým dopadem."""
     snapshot = board.record_snapshot(
         agent="sortimentni", source="rohlik.cz", fetches=[], item_count=3
     )
@@ -59,7 +59,9 @@ def collected(bus, board, clock, raw_dir, make_agent):
     )
     medialni.process_pending()
     send_regulatorni(bus)
-    make_regulatorni(make_agent, clock, raw_dir, FakeLlm(BASELINE_ANSWER)).process_pending()
+    office_answer = {"tisky": [assessment(65559, level="vysoký", effective=None)]}
+    llm = FakeLlm(BASELINE_ANSWER, office_answer)
+    make_regulatorni(make_agent, clock, raw_dir, llm, with_offices()).process_pending()
 
 
 def section(html, heading):
@@ -98,11 +100,13 @@ def test_tiles_show_headline_numbers_and_link_to_detail_pages(web, collected):
     offers = tile(html, "platných akčních cen")
     assert 'href="/akcni-ceny"' in offers
     assert "řetězců" in offers
-    assert " %</span>" in tile(html, "průměrná sleva")
+    assert " %</span>" in tile(html, "medián slevy")
     assert '<span class="value">1</span>' in tile(html, "článků za 30 dní")
-    tisky = tile(html, "sněmovních tisků o alkoholu")
-    assert '<span class="value">4</span>' in tisky
-    assert "z toho 2 s vysokým dopadem" in tisky
+    # Čtyři sněmovní tisky a jedna zpráva MF, jako na stránce Regulace.
+    regulace = tile(html, "sněmovních tisků a zpráv úřadů o alkoholu")
+    assert '<span class="value">5</span>' in regulace
+    assert 'href="/regulace"' in regulace
+    assert "z toho 3 s vysokým dopadem" in regulace
 
 
 def test_every_kiq_has_freshness_and_charts_or_a_link_to_them(web, collected):
@@ -186,7 +190,7 @@ def test_prehled_without_any_data_says_so_everywhere(web):
     html = page.text
     assert '<span class="value">0</span>' in tile(html, "sledovaných produktů")
     assert "zatím bez dat" in tile(html, "sledovaných produktů")
-    assert '<span class="value">—</span>' in tile(html, "průměrná sleva")
+    assert '<span class="value">—</span>' in tile(html, "medián slevy")
     assert html.count("Zatím bez dat") == 4
     assert "bez dat" in chart(html, "Novinky podle výrobce")
     assert "zatím žádný" in section(html, "Stav sběru")
@@ -202,3 +206,49 @@ def test_prehled_explains_what_the_tool_does_and_how_to_read_it(web):
     assert "Stock, Rudolf Jelínek, Fruko-Schulz, Jan Becher" in about
     assert "<summary>Pojmy</summary>" in about
     assert "<summary>Co nástroj nevidí</summary>" in about
+
+
+def record_offers(board, discounts):
+    """Snímek cenového agenta s akčními cenami platnými do 22. 11. 2026 a danými slevami."""
+    snapshot = board.record_snapshot(
+        agent="cenovy", source="akcniceny.cz", fetches=[], item_count=len(discounts)
+    )
+    ids = [
+        board.record_finding(
+            kiq=2,
+            agent="cenovy",
+            type="akcni_cena",
+            snapshot_id=snapshot.id,
+            source_url=f"https://www.akcniceny.cz/akce/{n}/",
+            content={
+                "product": f"Lihovina {n}",
+                "chain": "Albert",
+                "price": 199.9,
+                "discount_percent": discount,
+                "valid_until": "2026-11-22",
+            },
+        ).id
+        for n, discount in enumerate(discounts)
+    ]
+    board.record_snapshot_findings(snapshot.id, ids)
+
+
+def test_discount_tile_is_the_median_like_its_sparkline(web, board, clock):
+    # Průměr 30 %, medián 20 %: dlaždice ukazuje medián, stejně jako sparkline pod ní.
+    record_offers(board, [10, 20, 60])
+    clock.advance(days=1)
+    record_offers(board, [10, 20, 60])
+
+    html = web.get("/prehled").text
+
+    discount = tile(html, "medián slevy")
+    assert '<span class="value">20 %</span>' in discount
+    assert "Medián slevy po dnech" in discount
+    assert "průměrná sleva" not in html
+
+
+def test_prehled_uses_glossary_term_zadani_not_ukol(web):
+    html = web.get("/prehled").text
+
+    assert "úkol" not in html
+    assert "Zadání" in html

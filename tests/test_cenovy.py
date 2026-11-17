@@ -5,6 +5,7 @@ produktů. `vypis-bez-akcnich-cen.html` je skutečný výpis s odstraněnými pr
 výpisy, na kterých v daném testu nezáleží.
 """
 
+import logging
 from datetime import date, timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -506,3 +507,28 @@ def test_kupi_outage_does_not_fail_the_zadani(bus, board, clock, raw_dir, make_a
 def test_kupi_validity_without_year(text, expected):
     row = f'<div class="discounts_validity "><div><div>{text}</div></div></div>'
     assert _kupi_validity(row, date(2026, 11, 17)) == expected
+
+
+def test_kupi_offer_priced_from_is_skipped_and_the_zadani_still_informs(
+    bus, board, clock, raw_dir, make_agent, caplog
+):
+    """Cena „od …“ není cenou konkrétního Produktu: nabídka se vynechá, zbytek Zadání ne.
+    Vynechání se zaloguje s řetězcem a názvem produktu."""
+    routes = with_kupi()
+    rum = routes[KUPI_RUM].read_bytes()
+    # Skutečná stránka Kupi, jen Kaufland u Tuzemáku Fruko Schulz uvádí cenu „od 99,90 Kč“.
+    routes[KUPI_RUM] = rum.replace(
+        b'discount_price_value">99,90&nbsp;K', b'discount_price_value">od 99,90&nbsp;K', 1
+    )
+    cenovy = make_cenovy(make_agent, clock, raw_dir, routes)
+    zadani = send_zadani(bus)
+    caplog.set_level(logging.WARNING)
+
+    cenovy.process_pending()
+
+    assert bus.conversation(zadani.conversation_id)[-1].kind is Kind.INFORM
+    offers = kupi_offers(board)
+    assert not [f for f in offers if f.content["product"].startswith("Tuzemák Jindřichohradecký")]
+    assert "Kaufland" in caplog.text and "Tuzemák Jindřichohradecký" in caplog.text
+    assert any(f.content["product"] == "Božkov Tradiční 0,5 l" for f in offers)
+    assert akcni_ceny(board, "Božkov Tradiční 35 % 0,5l")
