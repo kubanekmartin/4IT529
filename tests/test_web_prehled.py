@@ -111,7 +111,11 @@ def test_every_kiq_has_freshness_and_charts_or_a_link_to_them(web, collected):
     for heading, href, source in [
         ("KIQ 1: Kde konkurence rozšiřuje sortiment", "/sortiment", "rohlik.cz"),
         ("KIQ 2: Kdo zlevňuje a za kolik", "/akcni-ceny", "akcniceny.cz"),
-        ("KIQ 3: O čem a kde konkurence mluví", "/komunikace", "zboziaprodej.cz"),
+        (
+            "KIQ 3: O čem a kde konkurence mluví",
+            "/komunikace",
+            "zboziaprodej.cz, mediar.cz, mediaguru.cz",
+        ),
         ("KIQ 4: Co a kdy změní pravidla trhu", "/regulace", "psp.cz"),
     ]:
         block = section(html, heading)
