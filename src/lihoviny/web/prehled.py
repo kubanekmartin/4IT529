@@ -29,7 +29,7 @@ CLANKY_PERIOD = timedelta(days=30)
 TOP_ITEMS = 8
 # Sběrní agenti v pořadí KIQ: (agent, KIQ, zdroj).
 COLLECTORS = [
-    ("sortimentni", "KIQ 1 Sortiment", "rohlik.cz"),
+    ("sortimentni", "KIQ 1 Sortiment", "rohlik.cz, alkohol.cz"),
     ("cenovy", "KIQ 2 Akční ceny", "akcniceny.cz, kupi.cz"),
     ("medialni", "KIQ 3 Komunikace", "zboziaprodej.cz, mediar.cz, mediaguru.cz"),
     ("regulatorni", "KIQ 4 Regulace", "psp.cz"),
@@ -142,7 +142,7 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "title": "KIQ 1: Kde konkurence rozšiřuje sortiment",
             "href": "/sortiment",
             "taken_at": sortiment_at,
-            "source": "rohlik.cz",
+            "source": "rohlik.cz, alkohol.cz",
             "charts": [
                 (
                     novinky_by_manufacturer(novinky),
