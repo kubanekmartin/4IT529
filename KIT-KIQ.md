@@ -43,7 +43,7 @@
 | KIQ | Agent | Co dělá | Zdroje v prototypu | V reálném nasazení | Výstup |
 |---|---|---|---|---|---|
 | 1 | **Sortimentní agent** | Denně prochází nabídku lihovin, zařadí produkty do devíti kategorií, porovná je s minulým snímkem a hlásí Novinky | E-shopy Rohlik.cz a Alkohol.cz | NielsenIQ Retail Measurement Services (nové položky ve všech měřených prodejnách) | Seznam Novinek podle výrobce a kategorie |
-| 2 | **Cenový agent** | Denně sbírá akční ceny lihovin s řetězcem a obdobím platnosti, přepočítá je na litr a na litr etanolu a páruje je s produkty ze sortimentu | Agregátory letáků AkčníCeny.cz a Kupi.cz (bez Tesca) | Ipsos Promo Tracker (letáky do 24 h, párování na EAN) | Promo kalendář konkurence a vývoj akčních cen v čase |
+| 2 | **Cenový agent** | Denně sbírá akční ceny lihovin s řetězcem a obdobím platnosti, přepočítá je na litr a na litr etanolu a páruje je s produkty ze sortimentu | Agregátory letáků AkčníCeny.cz a Kupi.cz | Ipsos Promo Tracker (letáky do 24 h, párování na EAN) | Promo kalendář konkurence a vývoj akčních cen v čase |
 | 3 | **Mediální agent** | Denně stahuje články o lihovinách a u každého určí výrobce, značku, kanál a téma | Oborový tisk: Zboží&Prodej, Mediář, MediaGuru | Monitoring reklamy admosphere (TV, internet, tisk, rádio, OOH) | Přehled kampaní a témat konkurence |
 | 4 | **Regulatorní agent** | Hlídá sněmovní tisky a zprávy úřadů o alkoholu a u každého odhadne dopad na výrobce lihovin a termín účinnosti | Otevřená data Poslanecké sněmovny, tiskové zprávy Ministerstva financí, aktuality Celní správy | ASPI Monitor legislativního procesu (od legislativního záměru a připomínkového řízení) | Upozornění na změnu s odhadem dopadu a termínem účinnosti |
 
@@ -159,7 +159,7 @@ Prototyp pokrývá všechny čtyři KIQ, většinu z nich ale jen zčásti; co p
 | KIQ | Co prototyp pokrývá | Co nepokrývá |
 |---|---|---|
 | 1 Produkty a sortiment | Novinky lihovin v devíti kategoriích na Rohlik.cz a Alkohol.cz, výrobce a značka každého produktu | Další e-shopy a kamenné prodejny, přihlášky ochranných známek (ÚPV, EUIPO), růst kategorií v prodejích |
-| 2 Akční ceny | Akční ceny z AkčníCeny.cz a Kupi.cz s řetězcem a obdobím platnosti, cena za litr a za litr etanolu, četnost a termíny akcí | Ceny přímo z e-shopů a věrnostních aplikací, běžné (neakční) ceny, Tesco z Kupi.cz |
+| 2 Akční ceny | Akční ceny z AkčníCeny.cz a Kupi.cz s řetězcem a obdobím platnosti, cena za litr a za litr etanolu, četnost a termíny akcí | Ceny přímo z e-shopů a věrnostních aplikací, běžné (neakční) ceny |
 | 3 Komunikace | Články oborového tisku (Zboží&Prodej, Mediář, MediaGuru) s výrobcem, značkou, kanálem a tématem | Sociální sítě a knihovna reklam Meta, letáky jako komunikační kanál, povinné načasování kampaní vůči promo akcím |
 | 4 Změny tržního prostředí | Sněmovní tisky o alkoholu, zprávy Ministerstva financí a Celní správy s odhadem dopadu a termínem účinnosti | Připravovaná legislativa v ODok, data ČSÚ, reakce konkurentů a řetězců na změny |
 
