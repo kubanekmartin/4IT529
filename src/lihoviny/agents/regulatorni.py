@@ -1,4 +1,10 @@
-"""Regulatorní agent (KIQ 4 Regulace): sněmovní tisky z otevřených dat Poslanecké sněmovny.
+"""Regulatorní agent (KIQ 4 Regulace): sněmovní tisky z otevřených dat Poslanecké sněmovny
+a zprávy úřadů (tiskové zprávy Ministerstva financí, aktuality Celní správy).
+
+Zprávy úřadů (`OFFICES`): výpis zpráv za rok (MF) a aktuality (Celní správa). Nová zpráva
+projde stejným filtrem klíčových slov v titulku jako tisky a teprve kandidáty posoudí LLM;
+relevantní je nález `uredni_zprava`. Viděné zprávy si agent pamatuje v tabulce `articles`
+(ID z adresy, u Celní správy otisk adresy). Výpadek úřadu Zadání neshodí, zaloguje se.
 
 Na Zadání stáhne dva archivy otevřených dat psp.cz: sněmovní tisky (`tisky.zip`, asi 4 MB)
 a poslance s orgány (`poslanci.zip`, kvůli poslaneckým klubům navrhovatelů). Zdroj je obnovuje
@@ -20,6 +26,7 @@ vypustí a tabulku osob vůbec nečte. Ani na disk nejdou archivy, jen to, co z 
 (tisky bez jmen, kluby a ID osob v nich) a otisk SHA-256 původního archivu.
 """
 
+import html
 import io
 import itertools
 import json
@@ -31,6 +38,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import date
 from enum import StrEnum
+from hashlib import sha256
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -39,7 +47,7 @@ from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.board import Snapshot
 from lihoviny.bus import Message
 from lihoviny.clock import PRAGUE
-from lihoviny.fetch import FetchResult
+from lihoviny.fetch import FetchError, FetchResult
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +55,8 @@ SOURCE = "psp.cz"
 TISKY_URL = "https://www.psp.cz/eknih/cdrom/opendata/tisky.zip"
 POSLANCI_URL = "https://www.psp.cz/eknih/cdrom/opendata/poslanci.zip"
 TISK_URL = "https://www.psp.cz/sqw/historie.sqw?o={period}&t={number}"
+MF_URL = "https://mf.gov.cz"
+CELNI_SPRAVA_URL = "https://celnisprava.gov.cz"
 
 # Filtr před voláním LLM: označení → vzor v názvu tisku (malými písmeny). Názvy tisků bývají
 # obecné („Novela z. o spotřebních daních“), o lihovinách rozhodne až LLM.
@@ -159,6 +169,28 @@ Nic si nevymýšlej; o tiscích víš jen to, co je ve vstupu.
 """
 
 
+@dataclass(frozen=True)
+class Zprava:
+    """Zpráva úřadu z výpisu: jen titulek, odkaz a datum (text zprávy agent nečte)."""
+
+    source: str
+    id: int
+    title: str
+    url: str
+    published_on: date | None
+
+    def keywords(self) -> list[str]:
+        text = self.title.casefold()
+        return [label for label, pattern in KEYWORDS.items() if re.search(pattern, text)]
+
+
+@dataclass(frozen=True)
+class Office:
+    name: str
+    url: Callable[..., str]
+    parse: Callable[[FetchResult], list[Zprava]]
+
+
 class Regulatorni(Agent):
     name = "regulatorni"
     role = "sběrný agent KIQ 4: sněmovní tisky o alkoholu z otevřených dat Sněmovny"
@@ -169,6 +201,8 @@ class Regulatorni(Agent):
         archive, tisky = self._read(TISKY_URL, lambda body: read_tisky(body, chamber))
         if not tisky:
             raise RegulatorniError(f"{SOURCE}: v otevřených datech není žádný tisk období")
+        office_pages, zpravy = self._read_offices()
+        fetched = [archive, poslanci, *office_pages]
 
         baseline = not self.board.snapshots(agent=self.name)
         known = self.board.known_tisky()
@@ -193,7 +227,7 @@ class Regulatorni(Agent):
                 errors.append(RegulatorniError("LLM neposoudil žádný tisk z dávky"))
                 continue
             with self.transaction():
-                snapshot = snapshot or self._record_snapshot([archive, poslanci], len(tisky))
+                snapshot = snapshot or self._record_snapshot(fetched, len(tisky))
                 assessed = [t for t in batch if t.source_id in assessments]
                 self.board.record_tisky(snapshot.id, [t.source_id for t in [*pending, *assessed]])
                 pending = []
@@ -212,7 +246,7 @@ class Regulatorni(Agent):
         if candidates and snapshot is None:
             raise errors[0]
         with self.transaction():
-            snapshot = snapshot or self._record_snapshot([archive, poslanci], len(tisky))
+            snapshot = snapshot or self._record_snapshot(fetched, len(tisky))
             self.board.record_tisky(snapshot.id, [t.source_id for t in pending])
             # Snímek obsahuje i tisky dřívějších nálezů: data jsou vždy úplný stav.
             in_data = {t.source_id for t in tisky}
@@ -224,14 +258,78 @@ class Regulatorni(Agent):
                     if f.agent == self.name and f.content.get("source_id") in in_data
                 ],
             )
+        new_findings += self._record_zpravy(snapshot.id, zpravy)
         return OdpovedSberu(
             snapshot_id=snapshot.id, new_findings=new_findings, item_count=len(tisky)
         )
 
     def _record_snapshot(self, archives: list[FetchResult], item_count: int) -> Snapshot:
+        names = [
+            SOURCE,
+            *(o.name for o in OFFICES if any(p.url == o.url(self.clock) for p in archives)),
+        ]
         return self.board.record_snapshot(
-            agent=self.name, source=SOURCE, fetches=archives, item_count=item_count
+            agent=self.name,
+            source=", ".join(names),
+            fetches=archives,
+            item_count=item_count,
         )
+
+    def _read_offices(self) -> tuple[list[FetchResult], list["Zprava"]]:
+        pages, zpravy = [], []
+        for office in OFFICES:
+            try:
+                page = self.fetcher.get(office.url(self.clock))
+                found = office.parse(page)
+            except (FetchError, ValueError) as error:
+                log.warning("%s: zdroj vynechán (%s)", office.name, error)
+                continue
+            if not found:
+                log.warning("%s: výpis bez zpráv (změnila se stránka?)", office.name)
+            pages.append(page)
+            zpravy += found
+        return pages, zpravy
+
+    def _record_zpravy(self, snapshot_id: int, zpravy: list["Zprava"]) -> int:
+        """Nové zprávy úřadů: bez klíčového slova jen jako viděné, ostatní posoudí LLM.
+        Když LLM selže, kandidáti zůstanou nevidění pro příští Zadání."""
+        seen = {o.name: self.board.article_ids(source=o.name) for o in OFFICES}
+        new = [z for z in zpravy if z.id not in seen[z.source]]
+        candidates = [z for z in new if z.keywords()]
+        assessments: dict[int, Assessment] = {}
+        if candidates:
+            today = self.clock.now().astimezone(PRAGUE).date()
+            try:
+                answer = self.llm.ask(
+                    _zpravy_prompt(candidates, today), Assessments, effort="low", system=SYSTEM
+                )
+                assessments = {a.id: a for a in answer.tisky}
+            except Exception as error:
+                log.warning("zprávy úřadů: posouzení LLM selhalo (%s)", error)
+        recorded = 0
+        with self.transaction():
+            for zprava in new:
+                answer = assessments.get(zprava.id)
+                if zprava.keywords() and answer is None:
+                    continue  # kandidát bez posudku: příště znovu
+                finding_id = None
+                if answer is not None and answer.relevant:
+                    finding_id = self.board.record_finding(
+                        kiq=4,
+                        agent=self.name,
+                        type="uredni_zprava",
+                        snapshot_id=snapshot_id,
+                        source_url=zprava.url,
+                        content=_zprava_content(zprava, answer),
+                    ).id
+                    recorded += 1
+                self.board.record_article(
+                    source=zprava.source,
+                    source_article_id=zprava.id,
+                    first_seen_snapshot_id=snapshot_id,
+                    finding_id=finding_id,
+                )
+        return recorded
 
     def _read[T](self, url: str, reader: Callable[[bytes], T]) -> tuple[FetchResult, T]:
         """Stáhne archiv a přečte ho. Na disk jde jen přečtená podoba bez jmen (JSON) a otisk
@@ -504,3 +602,81 @@ _MP_PROPOSAL = re.compile(
 _ROLE = re.compile(r"(?:min\.|ministr|předsed\w* vlády|vlád)")
 # Zkratka instituce velkými písmeny („ČNB“, „NKÚ“, „GA ČR“).
 _INSTITUTION = re.compile(r"[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]{2,}(?: [A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]{2,})*")
+
+
+def _parse_mf(page: FetchResult) -> list[Zprava]:
+    """Tiskové zprávy MF za rok: odkaz končí číselným ID zprávy."""
+    links = re.findall(
+        r'<a href="(/cs/ministerstvo/media/tiskove-zpravy/\d{4}/[^"]*-(\d+))"[^>]*>([^<]+)</a>',
+        page.text,
+    )
+    found = {
+        int(number): Zprava(
+            "mf.gov.cz", int(number), " ".join(html.unescape(title).split()), MF_URL + href, None
+        )
+        for href, number, title in links
+    }
+    return list(found.values())
+
+
+def _parse_celni_sprava(page: FetchResult) -> list[Zprava]:
+    """Aktuality Celní správy: odkaz, titulek a datum „(09.11.2026)“; ID je otisk adresy."""
+    items = re.findall(
+        r'<a href="(https://celnisprava\.gov\.cz/cz/aktuality/Stranky/[^"]+\.aspx)"[^>]*>([^<]+)</a>'
+        r'<span class="bl-datum">\((\d{2})\.(\d{2})\.(\d{4})\)</span>',
+        page.text,
+    )
+    found = {}
+    for url, title, day, month, year in items:
+        key = int.from_bytes(sha256(url.encode()).digest()[:7], "big")
+        found[key] = Zprava(
+            "celnisprava.gov.cz",
+            key,
+            " ".join(html.unescape(title).split()),
+            url,
+            date(int(year), int(month), int(day)),
+        )
+    return list(found.values())
+
+
+OFFICES = [
+    Office(
+        "mf.gov.cz",
+        lambda clock: (
+            f"{MF_URL}/cs/ministerstvo/media/tiskove-zpravy/{clock.now().astimezone(PRAGUE).year}"
+        ),
+        _parse_mf,
+    ),
+    Office(
+        "celnisprava.gov.cz",
+        lambda clock: f"{CELNI_SPRAVA_URL}/cz/aktuality/Stranky/default.aspx",
+        _parse_celni_sprava,
+    ),
+]
+
+
+def _zpravy_prompt(zpravy: list[Zprava], today: date) -> str:
+    parts = [
+        f"Dnes je {_czech(today)}. Místo sněmovních tisků posuď tyto zprávy úřadů (jen titulky,"
+        " text zprávy neznáš). Do pole id dej ID zprávy:"
+    ]
+    for zprava in zpravy:
+        when = f", vydáno {_czech(zprava.published_on)}" if zprava.published_on else ""
+        parts.append(
+            f"\nID {zprava.id}: {zprava.source}{when}\nTitulek: {zprava.title}"
+            f"\nKlíčová slova: {', '.join(zprava.keywords())}"
+        )
+    return "\n".join(parts)
+
+
+def _zprava_content(zprava: Zprava, answer: Assessment) -> dict[str, Any]:
+    return {
+        "source": zprava.source,
+        "title": zprava.title,
+        "published_on": zprava.published_on.isoformat() if zprava.published_on else None,
+        "keywords": zprava.keywords(),
+        "impact": answer.impact,
+        "impact_level": answer.impact_level,
+        "effective_date": answer.effective_date.isoformat() if answer.effective_date else None,
+        "effective_note": answer.effective_note,
+    }

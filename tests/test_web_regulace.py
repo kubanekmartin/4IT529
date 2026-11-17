@@ -134,3 +134,10 @@ def test_regulace_shows_tisky_by_stage_and_impact(web, collected):
     pipeline = pipeline[: pipeline.index("</figure>")]
     assert "dopad vysoký" in pipeline and "<summary>Jak to číst</summary>" in pipeline
     assert "<td>1. čtení</td>" in pipeline
+
+
+def test_regulace_page_has_office_news_section_even_when_empty(web, collected):
+    html = web.get("/regulace").text
+
+    assert "Zprávy úřadů" in html
+    assert "Žádná zpráva úřadů se zatím lihovin netýká." in html

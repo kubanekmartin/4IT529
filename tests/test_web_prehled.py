@@ -116,7 +116,11 @@ def test_every_kiq_has_freshness_and_charts_or_a_link_to_them(web, collected):
             "/komunikace",
             "zboziaprodej.cz, mediar.cz, mediaguru.cz",
         ),
-        ("KIQ 4: Co a kdy změní pravidla trhu", "/regulace", "psp.cz"),
+        (
+            "KIQ 4: Co a kdy změní pravidla trhu",
+            "/regulace",
+            "psp.cz, mf.gov.cz, celnisprava.gov.cz",
+        ),
     ]:
         block = section(html, heading)
         assert f'<a href="{href}">{heading}</a>' in html

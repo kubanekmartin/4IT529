@@ -376,3 +376,54 @@ def test_llm_failure_on_every_batch_is_failure_and_board_stays_untouched(
     make_regulatorni(make_agent, clock, raw_dir, RefusesFirstBatch()).process_pending()
 
     assert "refusal" in failure_reason(bus, board, zadani)
+
+
+MF_URL = "https://mf.gov.cz/cs/ministerstvo/media/tiskove-zpravy/2026"
+CELNI_SPRAVA_URL = "https://celnisprava.gov.cz/cz/aktuality/Stranky/default.aspx"
+
+
+def with_offices(**broken):
+    """Výpisy MF a Celní správy (zkrácené skutečné, 17. 11. 2026) k datům Sněmovny."""
+    urady = Path(__file__).parent / "fixtures" / "urady"
+    routes = source_routes(day=1) | {
+        MF_URL: urady / "mf-tiskove-zpravy.html",
+        CELNI_SPRAVA_URL: urady / "celni-sprava-aktuality.html",
+    }
+    return routes | broken
+
+
+def test_office_news_with_keywords_go_to_llm_and_relevant_ones_become_findings(
+    bus, board, clock, raw_dir, make_agent
+):
+    # Z MF má klíčové slovo (spotřební daň) jen zpráva 65559 o naftě: tu posoudí LLM
+    # (tady jako relevantní), ostatní zprávy si agent zapíše jako viděné bez LLM.
+    office_answer = {"tisky": [assessment(65559, level="nízký", effective=None)]}
+    llm = FakeLlm(BASELINE_ANSWER, office_answer)
+    regulatorni = make_regulatorni(make_agent, clock, raw_dir, llm, with_offices())
+    zadani = send_zadani(bus)
+
+    regulatorni.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    snapshot = board.snapshot(reply.content["snapshot_id"])
+    assert snapshot.source == "psp.cz, mf.gov.cz, celnisprava.gov.cz"
+    (zprava,) = [f for f in board.findings(kiq=4) if f.type == "uredni_zprava"]
+    assert zprava.source_url.endswith("-65559")
+    assert zprava.content["source"] == "mf.gov.cz"
+    assert zprava.content["keywords"] == ["spotřební daň"]
+    assert "65559" in llm.calls[1].prompt and "Kratom" not in llm.calls[1].prompt
+    assert len(board.article_ids(source="mf.gov.cz")) == 4
+    assert len(board.article_ids(source="celnisprava.gov.cz")) == 3
+
+
+def test_office_outage_does_not_fail_the_zadani(bus, board, clock, raw_dir, make_agent):
+    routes = with_offices(**{MF_URL: FetchError("503")})
+    regulatorni = make_regulatorni(make_agent, clock, raw_dir, FakeLlm(BASELINE_ANSWER), routes)
+    zadani = send_zadani(bus)
+
+    regulatorni.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    assert board.snapshot(reply.content["snapshot_id"]).source == "psp.cz, celnisprava.gov.cz"

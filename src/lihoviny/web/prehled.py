@@ -32,7 +32,7 @@ COLLECTORS = [
     ("sortimentni", "KIQ 1 Sortiment", "rohlik.cz, alkohol.cz"),
     ("cenovy", "KIQ 2 Akční ceny", "akcniceny.cz, kupi.cz"),
     ("medialni", "KIQ 3 Komunikace", "zboziaprodej.cz, mediar.cz, mediaguru.cz"),
-    ("regulatorni", "KIQ 4 Regulace", "psp.cz"),
+    ("regulatorni", "KIQ 4 Regulace", "psp.cz, mf.gov.cz, celnisprava.gov.cz"),
 ]
 # Úroveň dopadu sněmovního tisku → řada v grafu; legenda je ve stejném pořadí.
 IMPACT_LEVELS = {"vysoký": 1, "střední": 2, "nízký": 3}
@@ -184,7 +184,7 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "title": "KIQ 4: Co a kdy změní pravidla trhu",
             "href": "/regulace",
             "taken_at": _taken_at(snapshots, "regulatorni"),
-            "source": "psp.cz",
+            "source": "psp.cz, mf.gov.cz, celnisprava.gov.cz",
             "charts": [
                 (
                     tisky_timeline(tisky),
