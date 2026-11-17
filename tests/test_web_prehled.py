@@ -1,6 +1,6 @@
 """Stránka Přehled přes HTTP: dlaždice, grafy po KIQ a stav sběru z nálezů na tabuli.
 
-Akční ceny, články a sněmovní tisky zapíší skuteční agenti z uložených ukázek (jako
+Akční ceny, články, sněmovní tisky a zprávy úřadů zapíší skuteční agenti z uložených ukázek (jako
 v testech jednotlivých stránek), produkty a Novinky test (jako sortimentní agent).
 """
 
@@ -10,7 +10,7 @@ from test_cenovy import make_cenovy
 from test_cenovy import send_zadani as send_cenovy
 from test_medialni import STOCK_MODERNIZUJE, irrelevant, make_medialni
 from test_medialni import send_zadani as send_medialni
-from test_regulatorni import BASELINE_ANSWER, make_regulatorni
+from test_regulatorni import BASELINE_ANSWER, assessment, make_regulatorni, with_offices
 from test_regulatorni import send_zadani as send_regulatorni
 from test_web_sortiment import add_product
 
@@ -27,7 +27,7 @@ def web(web_database_url):
 @pytest.fixture
 def collected(bus, board, clock, raw_dir, make_agent):
     """Snímky všech čtyř sběrných agentů 16. 11. 2026: dvě Novinky (Stock a Metelka),
-    akční ceny z akcniceny.cz, článek o Stocku a sněmovní tisky."""
+    akční ceny z akcniceny.cz, článek o Stocku, sněmovní tisky a zpráva MF s vysokým dopadem."""
     snapshot = board.record_snapshot(
         agent="sortimentni", source="rohlik.cz", fetches=[], item_count=3
     )
@@ -59,7 +59,9 @@ def collected(bus, board, clock, raw_dir, make_agent):
     )
     medialni.process_pending()
     send_regulatorni(bus)
-    make_regulatorni(make_agent, clock, raw_dir, FakeLlm(BASELINE_ANSWER)).process_pending()
+    office_answer = {"tisky": [assessment(65559, level="vysoký", effective=None)]}
+    llm = FakeLlm(BASELINE_ANSWER, office_answer)
+    make_regulatorni(make_agent, clock, raw_dir, llm, with_offices()).process_pending()
 
 
 def section(html, heading):
@@ -100,9 +102,11 @@ def test_tiles_show_headline_numbers_and_link_to_detail_pages(web, collected):
     assert "řetězců" in offers
     assert " %</span>" in tile(html, "průměrná sleva")
     assert '<span class="value">1</span>' in tile(html, "článků za 30 dní")
-    tisky = tile(html, "sněmovních tisků o alkoholu")
-    assert '<span class="value">4</span>' in tisky
-    assert "z toho 2 s vysokým dopadem" in tisky
+    # Čtyři sněmovní tisky a jedna zpráva MF, jako na stránce Regulace.
+    regulace = tile(html, "sněmovních tisků a zpráv úřadů o alkoholu")
+    assert '<span class="value">5</span>' in regulace
+    assert 'href="/regulace"' in regulace
+    assert "z toho 3 s vysokým dopadem" in regulace
 
 
 def test_every_kiq_has_freshness_and_charts_or_a_link_to_them(web, collected):

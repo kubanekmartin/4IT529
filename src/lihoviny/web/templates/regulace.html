@@ -45,7 +45,7 @@
 {% endblock %}
 
 {% block content %}
-<h1>Regulace: sněmovní tisky o alkoholu</h1>
+<h1>Regulace: sněmovní tisky a zprávy úřadů o alkoholu</h1>
 
 {% if snapshot %}
 <p class="muted">
@@ -127,8 +127,12 @@ titulku mohou týkat výrobců lihovin (posouzení LLM jen z titulku).</p>
 <p class="source muted">
   Zdroj dat: Poslanecká sněmovna Parlamentu České republiky,
   <a href="https://www.psp.cz/sqw/hp.sqw?k=1300">otevřená data</a> (sněmovní tisky,
-  poslanci a orgány); data zpracována {{ snapshot.taken_at | datum }}. Místo jmen poslanců
-  uvádíme jejich poslanecký klub.
+  poslanci a orgány); Ministerstvo financí,
+  <a href="https://mf.gov.cz/cs/ministerstvo/media/tiskove-zpravy">tiskové zprávy</a>;
+  Celní správa České republiky,
+  <a href="https://celnisprava.gov.cz/cz/aktuality/Stranky/default.aspx">aktuality</a>;
+  data zpracována {{ snapshot.taken_at | datum }}. Místo jmen poslanců uvádíme jejich
+  poslanecký klub.
 </p>
 {% else %}
 <p>Regulatorní agent zatím nestáhl data Sněmovny.</p>

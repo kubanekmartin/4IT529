@@ -14,6 +14,7 @@ from test_regulatorni import (
     make_regulatorni,
     send_zadani,
     source_routes,
+    with_offices,
 )
 
 from lihoviny.llm import FakeLlm
@@ -141,3 +142,32 @@ def test_regulace_page_has_office_news_section_even_when_empty(web, collected):
 
     assert "Zprávy úřadů" in html
     assert "Žádná zpráva úřadů se zatím lihovin netýká." in html
+
+
+@pytest.fixture
+def collected_with_offices(bus, clock, raw_dir, make_agent):
+    """Výchozí snímek 16. 11. 2026 se sněmovními tisky i zprávami MF a Celní správy; LLM
+    posoudí jako relevantní zprávu MF 65559 o spotřební dani z nafty."""
+    office_answer = {"tisky": [assessment(65559, level="vysoký", effective=None)]}
+    llm = FakeLlm(BASELINE_ANSWER, office_answer)
+    send_zadani(bus)
+    make_regulatorni(make_agent, clock, raw_dir, llm, with_offices()).process_pending()
+
+
+def test_regulace_heading_names_tisky_and_office_news(web, collected_with_offices):
+    html = web.get("/regulace").text
+
+    assert "<h1>Regulace: sněmovní tisky a zprávy úřadů o alkoholu</h1>" in html
+    office_news = html[html.index('id="zpravy-uradu"') :]
+    assert 'href="https://mf.gov.cz/' in office_news and "65559" in office_news
+
+
+def test_regulace_footer_cites_all_three_kiq4_sources(web, collected_with_offices):
+    html = web.get("/regulace").text
+    footer = html[html.index('<p class="source muted">') :]
+    footer = footer[: footer.index("</p>")]
+
+    assert "Poslanecká sněmovna Parlamentu České republiky" in footer
+    assert "Ministerstvo financí" in footer and 'href="https://mf.gov.cz/' in footer
+    assert "Celní správa" in footer and 'href="https://celnisprava.gov.cz/' in footer
+    assert "data zpracována 16. 11. 2026" in footer
