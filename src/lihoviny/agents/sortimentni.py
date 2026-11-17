@@ -40,7 +40,6 @@ from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.board import Product
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchError, FetchResult
-from lihoviny.llm import LlmError
 from lihoviny.products import (
     CATEGORIES,
     SPIRIT_MIN_ABV,
@@ -174,7 +173,9 @@ class Sortimentni(Agent):
         unrecorded = [
             UnrecordedProduct(group) for key, group in in_snapshot.items() if key not in known
         ]
-        self._add_category_brand_manufacturer(unrecorded, source_brands, list(known.values()))
+        unrecorded = self._add_category_brand_manufacturer(
+            unrecorded, source_brands, list(known.values())
+        )
 
         previous = self.board.snapshots(agent=self.name)
         baseline = not previous
@@ -218,8 +219,12 @@ class Sortimentni(Agent):
 
     def _add_category_brand_manufacturer(
         self, unrecorded: list[UnrecordedProduct], source_brands: set[str], known
-    ) -> None:
-        """Doplní novým produktům kategorii, značku a výrobce; LLM jen tam, kde zdroj nestačí."""
+    ) -> list[UnrecordedProduct]:
+        """Doplní novým produktům kategorii, značku a výrobce; LLM jen tam, kde zdroj nestačí.
+
+        Produkt, který LLM nezařadil, vynechá (zapíše do logu); Značka, které LLM neurčil
+        výrobce, zůstane bez výrobce. Jedna vadná položka tak neshodí celé Zadání.
+        """
         brands = source_brands | {product.brand for product in known}
         unclear = []
         for product in unrecorded:
@@ -229,13 +234,15 @@ class Sortimentni(Agent):
                 unclear.append(product)
         if unclear:
             self._classify(unclear)
+        unrecorded = [p for p in unrecorded if p.category is not None and p.brand is not None]
 
         manufacturers = {product.brand: product.manufacturer for product in known}
         unknown_brands = sorted({p.brand for p in unrecorded if p.brand not in manufacturers})
         if unknown_brands:
             manufacturers |= self._ask_manufacturers(unknown_brands)
         for product in unrecorded:
-            product.manufacturer = manufacturers[product.brand]
+            product.manufacturer = manufacturers.get(product.brand)
+        return unrecorded
 
     def _classify(self, unclear: list[UnrecordedProduct]) -> None:
         items = [
@@ -263,7 +270,10 @@ class Sortimentni(Agent):
         for product in unclear:
             item = by_id.get(str(product.oldest_listing.source_id))
             if item is None:
-                raise LlmError(f"LLM nezařadil produkt {product.oldest_listing.name!r}")
+                listing = product.oldest_listing
+                source = ALKOHOL_CZ if listing.source_category_id == ALKOHOL_CZ_CATEGORY else SOURCE
+                log.warning("%s: LLM nezařadil produkt %r, vynechán", source, listing.name)
+                continue
             product.category = product.category or item.category
             product.brand = product.brand or item.brand
 
@@ -280,7 +290,7 @@ class Sortimentni(Agent):
         found = {item.brand: item.manufacturer for item in answer.brands}
         missing = [brand for brand in brands if brand not in found]
         if missing:
-            raise LlmError(f"LLM neurčil výrobce značek {', '.join(missing)}")
+            log.warning("LLM neurčil výrobce značek %s, zůstanou bez výrobce", ", ".join(missing))
         return found
 
     def _record_product(self, product: UnrecordedProduct, snapshot_id: int) -> Product:
