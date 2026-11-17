@@ -1,4 +1,8 @@
-"""Sortimentní agent (KIQ 1): produkty a Novinky z kategorie Lihoviny na rohlik.cz.
+"""Sortimentní agent (KIQ 1): produkty a Novinky z kategorie Lihoviny na rohlik.cz a alkohol.cz.
+
+Alkohol.cz (specializovaný e-shop) má vlastní výpis Novinky (`ALKOHOL_CZ_NOVINKY`, asi 37
+nejnovějších produktů). Lihovina z něj, která ještě není mezi produkty, je Novinka „podle
+prodejce alkohol.cz“, i mimo výchozí snímek. Výpadek alkohol.cz Zadání neshodí.
 
 Na Zadání stáhne stránku kategorie Lihoviny a z ní stránky podkategorií. Data čte
 z `__NEXT_DATA__`, které Rohlík vkládá do stránky: seznam podkategorií, výpis produktů
@@ -22,6 +26,7 @@ nezačíná žádnou značkou z filtru zdroje. Výrobce u zdroje není, takže h
 pro každou novou značku.
 """
 
+import html
 import json
 import logging
 import re
@@ -34,7 +39,7 @@ from pydantic import BaseModel, Field
 from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.board import Product
 from lihoviny.bus import Message
-from lihoviny.fetch import FetchResult
+from lihoviny.fetch import FetchError, FetchResult
 from lihoviny.llm import LlmError
 from lihoviny.products import (
     CATEGORIES,
@@ -53,6 +58,12 @@ SOURCE = "rohlik.cz"
 BASE_URL = "https://www.rohlik.cz"
 ROOT_URL = f"{BASE_URL}/c300108072-lihoviny"
 
+ALKOHOL_CZ = "alkohol.cz"
+ALKOHOL_CZ_URL = "https://www.alkohol.cz"
+ALKOHOL_CZ_NOVINKY = f"{ALKOHOL_CZ_URL}/produkty/novinky/"
+# Karty z alkohol.cz nemají podkategorii Rohlíku: kategorii i značku určí LLM.
+ALKOHOL_CZ_CATEGORY = -1
+ALKOHOL_CZ_NOTE = "podle prodejce alkohol.cz"
 RTD_SOURCE_CATEGORY = 300108082
 # Podkategorie Lihovin u zdroje → Kategorie. Chybějící (Dárková balení, Likéry a medoviny,
 # Aperitivy a nově přidané) jsou nejasné a rozhodne LLM.
@@ -147,6 +158,13 @@ class Sortimentni(Agent):
         subcategories = _subcategories(root)
         pages = [self.fetcher.get(url) for url in subcategories]
         listings, source_brands = _parse_subcategories(pages, subcategories)
+        fetches = [root, *pages]
+        try:
+            novinky = self.fetcher.get(ALKOHOL_CZ_NOVINKY)
+            listings += _parse_alkohol_cz(novinky)
+            fetches.append(novinky)
+        except FetchError as error:
+            log.warning("%s: zdroj vynechán (%s)", ALKOHOL_CZ, error)
 
         # Celé stahování a třídění proběhne dřív, než se cokoli zapíše na tabuli.
         known = {product.normalized_key: product for product in self.board.products()}
@@ -166,18 +184,25 @@ class Sortimentni(Agent):
         # udělal z běžných produktů falešné Novinky.
         with self.transaction():
             snapshot = self.board.record_snapshot(
-                agent=self.name, source=SOURCE, fetches=[root, *pages], item_count=len(in_snapshot)
+                agent=self.name,
+                source=", ".join(
+                    [SOURCE, *([ALKOHOL_CZ] if len(fetches) > len(pages) + 1 else [])]
+                ),
+                fetches=fetches,
+                item_count=len(in_snapshot),
             )
             for product in unrecorded:
                 stored = self._record_product(product, snapshot.id)
                 # Výchozí snímek: jen štítek prodejce. Později: ID u zdroje vyšší než výchozí stav.
+                # Alkohol.cz: vždy podle štítku prodejce (jeho ID s Rohlíkem nesouvisí).
+                from_alkohol_cz = product.oldest_listing.source_category_id == ALKOHOL_CZ_CATEGORY
                 is_novinka = (
                     product.labelled_new
-                    if baseline
+                    if baseline or from_alkohol_cz
                     else product.oldest_listing.source_id > watermark
                 )
                 if is_novinka:
-                    note = SELLER_NOTE if baseline else None
+                    note = ALKOHOL_CZ_NOTE if from_alkohol_cz else SELLER_NOTE if baseline else None
                     self._record_novinka(stored, snapshot.id, product.labelled_new, note)
                     new_findings += 1
         log.info(
@@ -438,3 +463,35 @@ def _queries(props: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _json_lines(items: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(item, ensure_ascii=False) for item in items)
+
+
+_ALKOHOL_CZ_CARD = re.compile(
+    r'<div class="h4-title">\s*<a[^>]*href="(/produkty/[^"]*-(\d+)/)"[^>]*>\s*([^<]+?)\s*</a>'
+)
+
+
+def _parse_alkohol_cz(page: FetchResult) -> list[Listing]:
+    """Lihoviny z výpisu Novinky na alkohol.cz: název nese objem i obsah alkoholu
+    („Bache Gabrielsen Cognac VS 0,7l 40%“). Víno, pivo a tašky vypadnou podle obsahu
+    alkoholu nebo objemu."""
+    listings = []
+    for href, source_id, raw_name in _ALKOHOL_CZ_CARD.findall(page.text):
+        name = " ".join(html.unescape(raw_name).split())
+        volume_ml, abv = parse_volume_ml(name), parse_abv(name)
+        if volume_ml is None or abv is None or abv < SPIRIT_MIN_ABV:
+            continue
+        listings.append(
+            Listing(
+                source_id=int(source_id),
+                name=name,
+                url=f"{ALKOHOL_CZ_URL}{href}",
+                volume_ml=volume_ml,
+                abv=abv,
+                labelled_new=True,
+                source_category_id=ALKOHOL_CZ_CATEGORY,
+                source_category_name="alkohol.cz: Novinky",
+            )
+        )
+    if not listings:
+        log.warning("%s: ve výpisu Novinky není žádná lihovina (změnila se stránka?)", ALKOHOL_CZ)
+    return listings

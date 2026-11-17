@@ -12,7 +12,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | --- | --- |
 | `/prehled` | Přehled (na něj vede `/`): hlavní čísla s vývojem za 30 dní, grafy po KIQ s vysvětlením (bez grafů, které má Brief) a stav sběru |
 | `/brief` | aktuální Brief, `/brief/archiv` starší Briefy |
-| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle devíti kategorií lihovin, u produktu jeho akční ceny; Novinky sledovaných konkurentů v čase |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz (Novinky i z alkohol.cz) podle devíti kategorií lihovin, u produktu jeho akční ceny; Novinky sledovaných konkurentů v čase |
 | `/akcni-ceny` | KIQ 2: cenový tlak na produkty zadavatele („Co to znamená pro vás“), statistiky a vývoj akčních cen (slevy, řetězce, kalendář akcí) a tabulka akčních cen z akcniceny.cz s kategorií a cenou za litr, filtrem a řazením podle sloupců |
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
 | `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím; témata po týdnech |
@@ -53,7 +53,14 @@ uložené na disku) a k němu nálezy, vše v jedné transakci. Odpoví INFORM j
 `{"snapshot_id", "new_findings", "item_count"}`; samotné nálezy jsou na tabuli. Chyba zdroje
 (po třech pokusech) nebo stránka, ze které nic nevyčte, je Selhání a tabule zůstane beze změny.
 
-### Sortimentní agent (KIQ 1, rohlik.cz)
+### Sortimentní agent (KIQ 1, rohlik.cz a alkohol.cz)
+
+Kromě Rohlíku čte výpis Novinky specializovaného e-shopu alkohol.cz (`/produkty/novinky/`,
+asi 37 nejnovějších produktů; název nese objem i obsah alkoholu). Lihovina z něj, která ještě
+není mezi produkty, je Novinka s poznámkou „podle prodejce alkohol.cz“, i po výchozím snímku
+(ID alkohol.cz s Rohlíkem nesouvisí, hranice ID pro ni neplatí). Kategorii, značku a výrobce
+určí LLM jako u nejasných produktů Rohlíku. Víno, pivo a doplňky vypadnou podle obsahu
+alkoholu nebo objemu. Výpadek alkohol.cz Zadání neshodí.
 
 Stáhne kategorii Lihoviny a její podkategorie (asi 13 stránek po 5 s) a data čte
 z `__NEXT_DATA__` stránky. Kategorii bere z podkategorie u zdroje; LLM rozhoduje jen nejasné
