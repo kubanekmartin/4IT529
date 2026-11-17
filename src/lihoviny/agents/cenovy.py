@@ -1,6 +1,6 @@
-"""Cenový agent (KIQ 2 Akční ceny): akční ceny lihovin a RTD z akcniceny.cz.
+"""Cenový agent (KIQ 2 Akční ceny): akční ceny lihovin (aspoň 15 % obj.) z akcniceny.cz.
 
-Na Zadání projde výpisy akčních cen podle klíčových slov (rum, vodka, gin, likéry, míchaný nápoj…)
+Na Zadání projde výpisy akčních cen podle klíčových slov (rum, vodka, gin, likéry…)
 i s jejich dalšími stranami. Výpis ukazuje u každého produktu nabídky jednotlivých řetězců:
 cenu, případně cenu s věrnostní kartou, o kolik procent je pod běžnou cenou, platnost
 a odkaz na leták. Každá nabídka je
@@ -31,7 +31,7 @@ from lihoviny.board import Finding
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchResult
 from lihoviny.pairing import Pairing, pair
-from lihoviny.products import parse_abv, parse_volume_ml
+from lihoviny.products import SPIRIT_MIN_ABV, parse_abv, parse_volume_ml
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +41,8 @@ SOURCE_HOSTS = {"www.akcniceny.cz", "akcniceny.cz"}
 LISTING_URL = BASE_URL + "/zbozi/napoje-alkoholicke/{}/"
 
 # Výpisy nápojů alkoholických podle klíčového slova: (slovo v adrese, jak ho uvádí zdroj).
-# Zdroj nemá samostatnou kategorii lihovin ani RTD; pivo, víno a sekt tak zůstanou stranou.
+# Zdroj nemá samostatnou kategorii lihovin; pivo, víno, sekt i míchané nápoje (RTD) tak zůstanou
+# stranou. Nabídku s obsahem alkoholu pod 15 % v názvu agent vynechá (`_is_spirit`).
 LISTINGS = [
     ("tuzemak-rum", "tuzemák, rum"),
     ("vodky", "vodka"),
@@ -52,7 +53,6 @@ LISTINGS = [
     ("likery", "likéry"),
     ("bylinne-destilaty", "bylinné destiláty"),
     ("ovocne-destilaty", "ovocné destiláty"),
-    ("michany-napoj", "míchaný nápoj"),
 ]
 # Pojistka proti zacyklenému stránkování; výpisy mají běžně 1–3 strany.
 MAX_PAGES = 10
@@ -80,7 +80,7 @@ class Offer:
 
 class Cenovy(Agent):
     name = "cenovy"
-    role = "sběrný agent KIQ 2: akční ceny lihovin a RTD z akcniceny.cz"
+    role = "sběrný agent KIQ 2: akční ceny lihovin z akcniceny.cz"
     fetch_delay = 1.0  # robots.txt akcniceny.cz: Crawl-delay: 1
 
     def handle_request(self, request: Message) -> dict[str, Any]:
@@ -90,6 +90,8 @@ class Cenovy(Agent):
         for slug, category in LISTINGS:
             for offer in self._read_listing(LISTING_URL.format(slug), pages):
                 content = _finding_content(offer, category)
+                if not _is_spirit(content):
+                    continue
                 key = _offer_key(offer.product_url, content)
                 offers.setdefault(key, (offer.product_url, content))
         if not offers:
@@ -341,3 +343,13 @@ _CARD = re.compile(r"<small[^>]*>([^<]+)</small>\s*([\d\s\xa0,]+)")
 _DISCOUNT = re.compile(r"-(\d+)<span>%")
 # Odkaz na leták relativní i celý; `_source_link` pak propustí jen https na akcniceny.cz.
 _FLYER = re.compile(r'href="([^"]*/letak/[^"]+)"')
+
+
+def _is_spirit(content: dict[str, Any]) -> bool:
+    """Lihovina, nebo nabídka bez obsahu alkoholu v názvu (ten doplní až párování).
+
+    shortcut: nabídku bez procent v názvu nejde poznat; z výpisů lihovin je to skoro vždy
+    lihovina. Kdyby prošly slabé nápoje, filtrovat i po párování podle produktu.
+    """
+    abv = content["abv_percent"]
+    return abv is None or Decimal(str(abv)) >= SPIRIT_MIN_ABV

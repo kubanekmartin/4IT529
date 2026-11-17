@@ -42,6 +42,12 @@ Příkaz vypíše Zadání i odpověď (INFORM, nebo FAILURE s důvodem) a obě 
 
 ## Sběrní agenti
 
+Systém sleduje jen lihoviny (tvrdý alkohol s aspoň 15 % obj., včetně likérů). Pivo, víno,
+nealko nápoje a hotové míchané nápoje (RTD) jsou mimo rozsah KIQ: sortimentní agent stránku
+RTD nestahuje a produkt pod 15 % vynechá, cenový agent nečte výpis míchaných nápojů a vynechá
+akční cenu s obsahem alkoholu pod 15 % v názvu. RTD sebrané do 17. 11. 2026 zůstávají
+v databázi, web je v Sortimentu neukazuje.
+
 Sběrný agent na Zadání stáhne zdroj, zapíše na tabuli jeden snímek (odkazy na surové stránky
 uložené na disku) a k němu nálezy, vše v jedné transakci. Odpoví INFORM jen s přehledem
 `{"snapshot_id", "new_findings", "item_count"}`; samotné nálezy jsou na tabuli. Chyba zdroje
@@ -75,8 +81,8 @@ začátku sledování):
 
 ### Cenový agent (KIQ 2, akcniceny.cz)
 
-Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin, likéry, míchaný
-nápoj…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
+Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin, likéry, bylinné
+a ovocné destiláty…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
 akční cena: cena, případně cena s věrnostní kartou, sleva, platnost a odkaz na leták. Objem
 a obsah alkoholu čte z názvu produktu stejně jako sortimentní agent; z nich počítá cenu za
 litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM potřebuje jen jako
@@ -228,7 +234,7 @@ ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
   portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
   agent sám z nálezů a ukládá je s Briefem jako SVG; web je vloží bez JavaScriptu. Pod každým
   grafem je tabulka s daty.
-- Portfolio zadavatele (návrh k odsouhlasení týmem) a sledovaní konkurenti jsou
+- Portfolio zadavatele (fiktivní značka Valnov, jen ke srovnání; odsouhlaseno týmem) a sledovaní konkurenti jsou
   v `src/lihoviny/zadavatel.toml`; sortimentní agent odtud bere jména konkurentů.
 
 ```sh

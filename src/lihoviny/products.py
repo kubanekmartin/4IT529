@@ -1,4 +1,4 @@
-"""Produkty: deset kategorií a normalizovaný klíč, podle kterého se pozná týž produkt.
+"""Produkty: devět kategorií lihovin a normalizovaný klíč, podle kterého se pozná týž produkt.
 
 Klíč tvoří značka a název (tak, jak je zdroj uvádí za sebou), objem a obsah alkoholu.
 Z názvu se vynechá obsah alkoholu, slova o dárkovém balení a obalu, diakritika a velikost
@@ -20,11 +20,11 @@ Category = Literal[
     "whisky",
     "brandy",
     "ovocne_destilaty",
-    "rtd",
     "ostatni",
 ]
 
-# Pořadí i popisky podle GLOSSARY.md (Kategorie).
+# Pořadí i popisky podle GLOSSARY.md (Kategorie). Starší řádky v databázi mohou mít ještě
+# kategorii `rtd` (sbíralo se do 17. 11. 2026); web je nezobrazuje.
 CATEGORIES: dict[Category, str] = {
     "rum_tuzemak": "Rum a tuzemák",
     "vodka": "Vodka",
@@ -34,9 +34,12 @@ CATEGORIES: dict[Category, str] = {
     "whisky": "Whisky",
     "brandy": "Brandy a vinné destiláty",
     "ovocne_destilaty": "Ovocné destiláty",
-    "rtd": "RTD",
     "ostatni": "Ostatní",
 }
+
+# Systém sleduje jen tvrdý alkohol: lihovina má podle nařízení (EU) 2019/787 aspoň 15 % obj.
+# Pivo, víno, nealko a hotové míchané nápoje (RTD) jsou mimo rozsah KIQ.
+SPIRIT_MIN_ABV = Decimal(15)
 
 # Procento v názvu („37,5%“, „35 % obj.“), ne však „40/37,5%“ (dva údaje v jednom zápisu).
 _ABV = re.compile(

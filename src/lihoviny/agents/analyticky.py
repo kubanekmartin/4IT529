@@ -65,7 +65,6 @@ LISTING_CATEGORIES = {
     "likéry": "ostatni_likery",
     "bylinné destiláty": "horke_likery",
     "ovocné destiláty": "ovocne_destilaty",
-    "míchaný nápoj": "rtd",
 }
 PSP_SOURCE = "Poslanecká sněmovna PČR, otevřená data psp.cz"
 # Strop nálezů jedné KIQ v promptu pro LLM; přednost mají sledovaní konkurenti a akční ceny

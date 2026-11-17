@@ -199,7 +199,7 @@ def test_akcni_cena_without_its_product_in_sortiment_stays_unpaired_without_aski
     assert reply.kind is Kind.INFORM
     assert llm.calls == []  # žádná akční cena nemá v sortimentu kandidáta
     offers = board.findings(kiq=2)
-    assert len(offers) == 24
+    assert len(offers) == 23
     assert {f.product_id for f in offers} == {None}
     assert all("paired_by" not in f.content for f in offers)
 
@@ -315,7 +315,7 @@ def test_llm_failure_leaves_akcni_ceny_unpaired_and_next_zadani_tries_again(
     reply = collect(bus, cenovy_with(make_agent, clock, raw_dir, llm=BrokenModel(error)))
 
     assert reply.kind is Kind.INFORM
-    assert reply.content["new_findings"] == 24
+    assert reply.content["new_findings"] == 23
     assert {f.product_id for f in board.findings(kiq=2)} == {None}
 
     clock.advance(days=1)

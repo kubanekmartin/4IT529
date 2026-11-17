@@ -22,13 +22,11 @@ PAGES = {
     "rum": "https://www.rohlik.cz/c300108075-rum-rumove-likery-a-rumove-elixiry",
     "vodka": "https://www.rohlik.cz/c300108080-vodka",
     "likery": "https://www.rohlik.cz/c300108078-likery-a-medoviny",
-    "rtd": "https://www.rohlik.cz/c300108082-ready-to-drink-hard-seltzer-koktejly-a-prislusenstvi",
 }
 
 # Odpovědi LLM k výchozímu snímku: kategorie a značka nejasných produktů, pak výrobci značek.
 BASELINE_CLASSIFICATION = {
     "products": [
-        {"id": "1440853", "category": "rtd", "brand": "Božkov"},
         {"id": "1422473", "category": "vodka", "brand": "Pražská"},
         {"id": "1352557", "category": "horke_likery", "brand": "Fernet Stock"},
         {"id": "1485101", "category": "ostatni_likery", "brand": "Božkov"},
@@ -109,13 +107,13 @@ def test_first_snapshot_reports_only_novinky_labelled_by_seller(
 
     assert reply.kind is Kind.INFORM
     snapshot = board.snapshot(reply.content["snapshot_id"])
-    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 2, "item_count": 11}
+    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 2, "item_count": 8}
     assert (snapshot.agent, snapshot.source, snapshot.taken_at) == (
         "sortimentni",
         "rohlik.cz",
         clock.now() - timedelta(days=1),
     )
-    assert len(snapshot.raw_paths) == 6  # Lihoviny a pět podkategorií, bez nealko nápojů
+    assert len(snapshot.raw_paths) == 5  # Lihoviny a čtyři podkategorie, bez nealko nápojů a RTD
     assert sorted(novinky(board, snapshot.id)) == [
         ("Božkov Modrá 19 % obj.", "podle prodejce"),
         ("Božkov Na pečení 20 % obj.", "podle prodejce"),
@@ -134,7 +132,8 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
     described = {
         p.name: (p.manufacturer, p.brand, p.volume_ml, p.abv, p.category) for p in products
     }
-    # Brčka a nealko drink z RTD nejsou lihoviny (nemají objem nebo obsah alkoholu).
+    # Jen lihoviny (aspoň 15 % obj.): Cuba Libre 4,5 % mezi rumy ani Kozičky 3,1 % mezi likéry
+    # nejsou, stránka RTD se nestahuje.
     assert described == {
         "Božkov Originál Tuzemský 37,5% obj.": (
             "Stock",
@@ -144,7 +143,6 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
             "rum_tuzemak",
         ),
         "Božkov Na pečení 20 % obj.": ("Stock", "Božkov", 500, Decimal(20), "rum_tuzemak"),
-        "Božkov Republica Cuba Libre 4,5 % obj.": ("Stock", "Božkov", 250, Decimal("4.5"), "rtd"),
         "Božkov Vodka 37,5% obj.": ("Stock", "Božkov", 500, Decimal("37.5"), "vodka"),
         "Pražská Jemná 30% obj.": (None, "Pražská", 500, Decimal(30), "vodka"),
         "Fernet Stock Original 35% obj.": (
@@ -155,20 +153,6 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
             "horke_likery",
         ),
         "Božkov Modrá 19 % obj.": ("Stock", "Božkov", 500, Decimal(19), "ostatni_likery"),
-        "R. JELÍNEK Kozičky 3,1% obj. plech": (
-            "Rudolf Jelínek",
-            "R. Jelínek",
-            250,
-            Decimal("3.1"),
-            "rtd",
-        ),
-        "Becherovka Cocktail Rose & Elderflower 4,5% – plech": (
-            "Jan Becher",
-            "Becherovka",
-            250,
-            Decimal("4.5"),
-            "rtd",
-        ),
         "Jägermeister 35 % obj. dárkové balení se 2 panáky": (
             "Mast-Jägermeister",
             "Jägermeister",
@@ -187,11 +171,10 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
     )
     # Třídění a určení výrobce je extrakce: nízký effort podle specu.
     assert [call.effort for call in llm.calls] == ["low", "low"]
-    # LLM dostane jen nejasné produkty (podle ID u zdroje): slabý nápoj mimo RTD, značka mimo
-    # filtr zdroje, likéry (hořké, nebo ostatní?) a dárková balení.
+    # LLM dostane jen nejasné produkty (podle ID u zdroje): značka mimo filtr zdroje,
+    # likéry (hořké, nebo ostatní?) a dárková balení.
     asked_about_category = llm.calls[0].prompt
     for unclear in [
-        "1440853",  # Božkov Republica Cuba Libre 4,5 % v rumech
         "1422473",  # Pražská Jemná: ve filtru je jen značka „Pražská vodka“
         "1352557",  # Fernet Stock Original
         "1485101",  # Božkov Modrá
@@ -203,8 +186,8 @@ def test_products_get_category_from_source_and_llm_decides_only_unclear_ones(
         "1287783",  # Božkov Originál Tuzemský v rumech
         "1485102",  # Božkov Na pečení v rumech
         "731079",  # Božkov Vodka ve vodkách
-        "1462285",  # R. Jelínek Kozičky v likérech i v RTD
-        "1482102",  # Becherovka Cocktail v RTD
+        "1440853",  # Božkov Republica Cuba Libre 4,5 % v rumech: není lihovina
+        "1462285",  # R. Jelínek Kozičky 3,1 % v likérech: není lihovina
     ]:
         assert f'"{clear}"' not in asked_about_category
 
@@ -254,16 +237,16 @@ def test_product_first_seen_after_baseline_is_novinka(bus, board, clock, raw_dir
     (finding,) = board.findings(kiq=1, snapshot_id=reply.content["snapshot_id"])
     assert (finding.type, finding.source_url, finding.found_at) == (
         "novinka",
-        "https://www.rohlik.cz/1485268-metelka-likery-cesky-jablecny-strudl-14-obj",
+        "https://www.rohlik.cz/1485268-metelka-likery-cesky-jablecny-strudl-15-obj",
         seen_at,
     )
     assert finding.content == {
-        "name": "Metelka Likéry Český jablečný štrůdl 14 % obj.",
+        "name": "Metelka Likéry Český jablečný štrůdl 15 % obj.",
         "brand": "Metelka Likéry",
         "manufacturer": "Metelka",
         "category": "ostatni_likery",
         "volume_ml": 500,
-        "abv": 14.0,
+        "abv": 15.0,
         "seller_label": True,
     }
     product = next(p for p in board.products() if p.id == finding.product_id)

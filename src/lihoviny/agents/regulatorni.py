@@ -149,7 +149,7 @@ class Assessments(BaseModel):
 SYSTEM = """\
 Jsi analytik regulace pro českého středně velkého výrobce lihovin. Dostaneš sněmovní tisky
 (návrhy zákonů a další dokumenty Poslanecké sněmovny), které prošly filtrem klíčových slov.
-U každého rozhodni, zda může změnit pravidla pro výrobce lihovin a RTD v ČR: spotřební daň
+U každého rozhodni, zda může změnit pravidla pro výrobce lihovin v ČR: spotřební daň
 z lihu, DPH, reklama, prodej a jeho omezení, značení a etikety, obaly a zálohy, ochrana
 zdraví před alkoholem, evidence lihu. Názvy tisků bývají obecné: když z nich nejde poznat,
 zda se tisk lihovin týká, posuď, jak pravděpodobné to je, a nejistotu řekni v dopadu.

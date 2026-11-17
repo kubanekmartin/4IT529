@@ -1,9 +1,10 @@
 # Zadavatel (GLOSSARY.md): fiktivní středně velký český výrobce lihovin se značkou Valnov.
 # Brief z tohoto souboru bere portfolio zadavatele a sledované konkurenty.
 #
-# NÁVRH K ODSOUHLASENÍ TÝMEM: portfolio navrhl analytický agent (#25). Produkty, značka i ceny
-# jsou vymyšlené; běžné ceny jsou odhad běžných (ne akčních) cen v řetězcích na podzim 2026.
-# Tým portfolio schválí nebo upraví v PR; změna nevyžaduje změnu kódu.
+# FIKTIVNÍ PORTFOLIO (odsouhlaseno týmem 17. 11. 2026): značka Valnov, produkty i ceny jsou
+# vymyšlené a slouží jen ke srovnání s akčními cenami a Novinkami skutečných konkurentů.
+# Běžné ceny jsou odhad běžných (ne akčních) cen v řetězcích na podzim 2026. Jen lihoviny
+# (aspoň 15 % obj.), stejně jako KIQ. Změna nevyžaduje změnu kódu.
 
 # Sledovaní konkurenti: výrobci, kterým Brief dává přednost před ostatními. Jména přesně
 # tak, jak je sortimentní agent zapisuje k produktům (výrobce).
@@ -60,11 +61,3 @@ category = "brandy"
 volume_ml = 700
 abv = 36
 regular_price = 289.90
-
-[[portfolio]]
-code = "rum-cola-033"
-name = "Valnov Rum & Cola 5 % 0,33 l"
-category = "rtd"
-volume_ml = 330
-abv = 5
-regular_price = 44.90

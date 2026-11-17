@@ -44,7 +44,6 @@ def test_akcni_ceny_page_shows_chain_validity_and_litre_prices(web, collected):
 def test_akcni_ceny_page_shows_card_price_future_start_and_unknown_alcohol(web, collected):
     html = web.get("/akcni-ceny").text
 
-    assert "159,60" in row(html, "Míchaný drink 4,5% 250 ml", "Albert")
     captain = row(html, "Captain Morgan Original Spiced Gold 0,7l", "Tesco")
     assert "428,43" in captain
     assert captain.count("—") == 1  # obsah alkoholu neznáme
@@ -74,13 +73,15 @@ def test_akcni_cena_without_end_date_stays_on_the_page_while_the_latest_snapshot
         clock.advance(days=1)
 
     without_end = source_routes()
-    without_end[LISTING.format("michany-napoj")] = (
-        (FIXTURES / "michany-napoj.html").read_bytes().replace(b"Plat\xc3\xad do:", b"Platnost:")
+    without_end[LISTING.format("tuzemak-rum")] = (
+        (FIXTURES / "tuzemak-rum.html").read_bytes().replace(b"Plat\xc3\xad do:", b"Platnost:")
     )
     collect(without_end)
     collect(without_end)  # nález vznikl v prvním snímku, druhý ho obsahuje znovu
 
-    assert "neuvedeno" in row(web.get("/akcni-ceny").text, "Míchaný drink 4,5% 250 ml", "Albert")
+    assert "neuvedeno" in row(
+        web.get("/akcni-ceny").text, "Božkov Original Tuzemský 37,5% 0,5l", "Albert"
+    )
 
     collect(source_routes())  # zdroj už uvádí konec platnosti: jiná akční cena
 
@@ -103,15 +104,13 @@ def test_decision_box_shows_price_pressure_on_each_portfolio_product(web, collec
     html = web.get("/akcni-ceny").text
 
     assert "Co to znamená pro vás" in html
+    assert "Portfolio zadavatele (značka Valnov) je fiktivní" in html
     # 360 Kč/l proti Božkovu Original v Albertu za 240 Kč/l: o 33 % levněji.
     tuzemak = pressure_row(html, "Valnovský tuzemák 37,5 % 0,5 l")
     assert "▲ vysoký" in tuzemak
     assert "Božkov Original Tuzemský 37,5% 0,5l, Albert" in tuzemak
     assert "−33 %" in tuzemak
     assert "Zvažte vlastní akci" in tuzemak and "obvykle zlevňuje o" in tuzemak
-    # Míchaný drink je i v akci dražší než Rum & Cola zadavatele běžně.
-    rtd = pressure_row(html, "Valnov Rum &amp; Cola 5 % 0,33 l")
-    assert "▼ nízký" in rtd and "+17 %" in rtd
     gin = pressure_row(html, "Valnov Dry Gin 40 % 0,7 l")
     assert "– bez akce konkurence" in gin and "v kategorii teď žádná" in gin
 
@@ -186,7 +185,7 @@ def prices_in_table(html):
 
 def test_table_filters_by_chain_text_and_price_range(web, collected):
     billa = web.get("/akcni-ceny", params={"retezec": "BILLA"}).text
-    assert "Zobrazeno 4 z 22 akčních cen podle filtru" in billa
+    assert "Zobrazeno 4 z 21 akčních cen podle filtru" in billa
     assert chains_in_table(billa) == ["BILLA"] * 4
 
     bozkov = products_in_table(web.get("/akcni-ceny", params={"produkt": "božkov"}).text)
@@ -218,7 +217,7 @@ def test_sort_links_keep_filters_and_flip_direction(web, collected):
 
 
 def test_invalid_filter_values_are_ignored_and_empty_result_says_so(web, collected):
-    assert "Zobrazeno 22 z 22" in web.get("/akcni-ceny?cena_od=abc&razeni=xyz").text
+    assert "Zobrazeno 21 z 21" in web.get("/akcni-ceny?cena_od=abc&razeni=xyz").text
     html = web.get("/akcni-ceny", params={"produkt": "neexistuje"}).text
     assert "Filtru neodpovídá žádná akční cena." in html
     # Rady pro zadavatele počítají se všemi akčními cenami, ne jen s vyfiltrovanými.

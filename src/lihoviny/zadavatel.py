@@ -1,6 +1,6 @@
 """Zadavatel: portfolio zadavatele a sledovaní konkurenti z konfigurace `zadavatel.toml`.
 
-Soubor upravuje tým (portfolio je návrh k odsouhlasení), proto se při načtení kontroluje:
+Soubor upravuje tým (portfolio je fiktivní, ke srovnání), proto se při načtení kontroluje:
 chybná kategorie nebo počet produktů mimo 5–8 zastaví agenta hned při startu.
 """
 

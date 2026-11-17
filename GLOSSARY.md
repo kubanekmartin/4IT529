@@ -11,7 +11,7 @@ Fiktivní středně velký český výrobce lihovin, pro jehož obchodního a ma
 _Avoid_: klient, zákazník, firma
 
 **Portfolio zadavatele**:
-Fiktivní sada produktů zadavatele s jejich běžnými cenami, ke které Brief vztahuje doporučení.
+Fiktivní sada produktů zadavatele (značka Valnov) s jejich běžnými cenami, ke které Brief vztahuje doporučení. Slouží jen ke srovnání se skutečnými akčními cenami a Novinkami konkurentů.
 _Avoid_: naše produkty, sortiment zadavatele
 
 **Výrobce**:
@@ -41,11 +41,15 @@ Obchodní jméno, pod kterým výrobce prodává více produktů (například Bo
 _Avoid_: brand
 
 **Kategorie**:
-Jedna z deseti skupin, do kterých systém řadí každý produkt: rum a tuzemák, vodka, hořké likéry, ostatní likéry, gin, whisky, brandy a vinné destiláty, ovocné destiláty, RTD, ostatní.
+Jedna z devíti skupin, do kterých systém řadí každý produkt: rum a tuzemák, vodka, hořké likéry, ostatní likéry, gin, whisky, brandy a vinné destiláty, ovocné destiláty, ostatní.
 _Avoid_: druh, typ, segment
 
+**Lihovina**:
+Tvrdý alkohol s aspoň 15 % obj. (nařízení (EU) 2019/787), včetně likérů. Jen lihoviny systém sleduje; pivo, víno, nealko nápoje a RTD jsou mimo rozsah KIQ.
+_Avoid_: alkohol, nápoj
+
 **RTD**:
-Hotový míchaný nápoj s lihovinou (ready to drink), obvykle v plechovce a s nízkým obsahem alkoholu.
+Hotový míchaný nápoj s lihovinou (ready to drink), obvykle v plechovce a s nízkým obsahem alkoholu. Mimo rozsah systému (od 17. 11. 2026).
 _Avoid_: koktejl, míchaný nápoj, plechovka
 
 **Novinka**:
