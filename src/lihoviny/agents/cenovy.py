@@ -27,7 +27,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
@@ -375,8 +375,12 @@ def _money(value: Decimal) -> float:
 
 
 def _czech_number(text: str) -> Decimal | None:
+    """Česká cena jako číslo; None, když cena chybí nebo není číslem (např. „od 99,90“)."""
     digits = "".join(text.split()).replace(",", ".")
-    return Decimal(digits) if digits else None
+    try:
+        return Decimal(digits) if digits else None
+    except InvalidOperation:
+        return None
 
 
 def _date_after(label: str, part: str) -> date | None:
