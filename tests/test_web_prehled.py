@@ -192,13 +192,18 @@ def test_prehled_without_any_data_says_so_everywhere(web):
     assert "zatím bez dat" in tile(html, "sledovaných produktů")
     assert '<span class="value">—</span>' in tile(html, "medián slevy")
     assert html.count("Zatím bez dat") == 4
-    assert "bez dat" in chart(html, "Novinky podle výrobce")
+    # Prázdné grafy se nekreslí, blok KIQ místo nich řekne jedním řádkem, že nic nenašel.
+    assert "Novinky podle výrobce" not in html
+    assert html.count('<p class="no-data">') == 3
     assert "zatím žádný" in section(html, "Stav sběru")
 
 
 def test_prehled_explains_what_the_tool_does_and_how_to_read_it(web):
     html = web.get("/prehled").text
-    about = html[html.index('<section class="about"') : html.index("</section>")]
+    about = html[html.index('<details class="about"') : html.index('<section class="kiq"')]
+
+    above = html[: html.index('<details class="about"')]
+    assert "Každé pondělí v 7:00 víte, co udělala konkurence." in above
 
     assert "Co nástroj dělá" in about and "Jak číst tuto stránku" in about
     for kiq in ["KIQ 1 Sortiment", "KIQ 2 Akční ceny", "KIQ 3 Komunikace", "KIQ 4 Regulace"]:

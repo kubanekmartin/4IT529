@@ -19,8 +19,8 @@
   .health .failure { color: var(--failure); font-weight: 600; }
   .health-wrap { overflow-x: auto; }
   .about {
-    background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
-    border-radius: var(--radius); box-shadow: var(--shadow); padding: .25rem 1rem .75rem; margin: 0 0 1.25rem;
+    background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--brown);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: .75rem 1rem; margin: 0 0 1.25rem;
   }
   .about h2 { font-size: 1.125rem; margin: .75rem 0 .5rem; }
   .about p, .about ul, .about ol { margin: 0 0 .5rem; }
@@ -30,6 +30,10 @@
   @media (min-width: 56rem) { .about-cols { grid-template-columns: 1fr 1fr; } }
   .about details { margin-top: .5rem; }
   .about summary { cursor: pointer; font-weight: 600; }
+  /* Stejně velké jako nadpis bloku KIQ, aby si sekce všimli. */
+  .about > summary { color: var(--brand); font-size: 1.25rem; font-weight: 700; letter-spacing: -.015em; padding: .25rem 0; }
+  .about[open] > summary { margin-bottom: .5rem; }
+  .no-data { color: var(--muted); margin: 0; }
   .about dl { margin: .5rem 0 0; }
   .about dt { font-weight: 600; }
   .about dd { margin: 0 0 .5rem; }
@@ -38,8 +42,7 @@
 
 {% block content %}
 <h1>Přehled</h1>
-<p class="lead">Hlavní čísla a grafy ze všech čtyř KIQ na jednom místě, jako podklad pro plán
-promo akcí a portfolia zadavatele. Týdenní souhrn s doporučeními je v <a href="/brief">Briefu</a>.</p>
+<p class="lead">Každé pondělí v 7:00 víte, co udělala konkurence.</p>
 
 <div class="tiles">
   {% for tile in tiles %}
@@ -47,10 +50,13 @@ promo akcí a portfolia zadavatele. Týdenní souhrn s doporučeními je v <a hr
   {% endfor %}
 </div>
 
-<section class="about" aria-labelledby="o-nastroji">
+<details class="about">
+  <summary>Co nástroj dělá a jak číst tuto stránku</summary>
+  <p class="muted">Hlavní čísla a grafy ze všech čtyř KIQ na jednom místě, jako podklad pro plán
+promo akcí a portfolia zadavatele. Týdenní souhrn s doporučeními je v <a href="/brief">Briefu</a>.</p>
   <div class="about-cols">
     <div>
-      <h2 id="o-nastroji">Co nástroj dělá</h2>
+      <h2>Co nástroj dělá</h2>
       <p>Lihoviny MAS je multiagentní systém konkurenčního zpravodajství pro obchodního
       a marketingového ředitele zadavatele, středně velkého českého výrobce lihovin (značka
       Valnov). Sleduje, co dělá konkurence s produkty, cenami a komunikací a co se mění na
@@ -117,7 +123,7 @@ promo akcí a portfolia zadavatele. Týdenní souhrn s doporučeními je v <a hr
       <li>Celý sortiment: rohlik.cz ve výpisu ukazuje jen část produktů kategorie.</li>
     </ul>
   </details>
-</section>
+</details>
 
 
 {% for kiq in kiqs %}
@@ -125,7 +131,10 @@ promo akcí a portfolia zadavatele. Týdenní souhrn s doporučeními je v <a hr
   <h2><a href="{{ kiq.href }}">{{ kiq.title }}</a></h2>
   {{ freshness(kiq.taken_at, kiq.source) }}
   {% if kiq.elsewhere %}<p class="elsewhere">{{ kiq.elsewhere }} <a href="/brief">Brief →</a> · <a href="{{ kiq.href }}">Akční ceny →</a></p>{% endif %}
-  {% if kiq.charts %}
+  {#- Žádný graf nemá data: místo prázdných rámečků „bez dat“ jen jeden řádek. -#}
+  {% if kiq.charts and not kiq.charts | selectattr("0.rows") | list %}
+  <p class="no-data">Agent zdroje prošel, ale zatím nenašel nic, co by šlo vykreslit.</p>
+  {% elif kiq.charts %}
   <div class="charts">
     {% for chart, explanation in kiq.charts %}
     {{ chart_figure(chart, explanation) }}

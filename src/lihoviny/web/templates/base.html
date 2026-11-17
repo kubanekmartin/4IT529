@@ -6,12 +6,14 @@
   <meta name="robots" content="noindex">
   <title>{% block title %}{% endblock %} · Lihoviny MAS</title>
   <style>
-    /* Barvy a tvary celého webu; tmavý režim podle nastavení systému. */
+    /* Barvy a tvary celého webu; tmavý režim podle nastavení systému.
+       Lahvově zelená a hnědá nesou vzhled, oranžová (--accent) jen důležité věci. */
     :root {
       --bg: #f6f6f7; --surface: #ffffff; --subtle: #f1f1f3; --text: #18181b; --muted: #6b6b74;
-      --border: #e4e4e8; --accent: #b4410f; --accent-2: #e07a2e; --accent-soft: #fdf0e7;
-      --link: #1f5fa8; --hover: #f1f1f3; --header-bg: rgb(255 255 255 / .8);
-      --glow: rgb(224 122 46 / .10);
+      --border: #e4e4e8; --accent: #c2570c; --accent-2: #e8892f; --accent-soft: #fdf0e7;
+      --brand: #1f4d36; --brand-2: #2f6b4a; --brown: #6b4a2b;
+      --link: #1f5c3d; --hover: #f1f1f3; --header-bg: rgb(255 255 255 / .8);
+      --glow: rgb(31 77 54 / .09);
       --request: #1f5fa8; --inform: #2c7a3f; --query: #8a6100; --failure: #b42318;
       --radius: 16px; --radius-sm: 10px;
       --shadow: 0 1px 2px rgb(24 24 27 / .04), 0 1px 3px rgb(24 24 27 / .04);
@@ -21,8 +23,9 @@
       :root {
         --bg: #0e0e10; --surface: #17171a; --subtle: #1f1f23; --text: #f4f4f5; --muted: #a1a1aa;
         --border: #2a2a2f; --accent: #f0955a; --accent-2: #f7b27a; --accent-soft: #2c1a0f;
-        --link: #8fbcf2; --hover: #222226; --header-bg: rgb(23 23 26 / .8);
-        --glow: rgb(240 149 90 / .08);
+        --brand: #4f9a6f; --brand-2: #7cc49a; --brown: #c49a6c;
+        --link: #8fd1a8; --hover: #222226; --header-bg: rgb(23 23 26 / .8);
+        --glow: rgb(111 191 143 / .07);
         --request: #7fb0ec; --inform: #7ccf8f; --query: #e6c05c; --failure: #f2877d;
         --shadow: 0 1px 2px rgb(0 0 0 / .4); --shadow-hover: 0 8px 28px rgb(0 0 0 / .5);
       }
@@ -55,8 +58,8 @@
     header .brand::before {
       content: "L"; display: grid; place-items: center; width: 2rem; height: 2rem;
       border-radius: 10px; color: #fff; font-weight: 800; font-size: 1rem;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 2px 8px rgb(180 65 15 / .3), inset 0 1px 0 rgb(255 255 255 / .25);
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      box-shadow: 0 2px 8px rgb(31 77 54 / .3), inset 0 1px 0 rgb(255 255 255 / .25);
     }
     body > header nav {
       display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none;
@@ -117,12 +120,12 @@
        Zelená a žlutá mají na bílé kontrast pod 3:1, proto graf vždy vypisuje hodnoty
        a nese tabulku dat. `s0` je šedá pro „ostatní“ vedle zvýrazněné řady. */
     :root {
-      --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+      --series-1: #d4691b; --series-2: #2f6b4a; --series-3: #8b5a2b; --series-4: #c99a2e;
       --series-0: #a3a29c;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+        --series-1: #f0955a; --series-2: #5fae80; --series-3: #c08a55; --series-4: #e0b850;
         --series-0: #6b6a66;
       }
     }
@@ -198,9 +201,9 @@
     .calendar-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: .75rem; margin-left: 9rem; }
     @media (max-width: 30rem) { .calendar-row { grid-template-columns: 1fr; } .calendar-axis { margin-left: 0; } }
     .spark { display: block; margin-top: .5rem; overflow: visible; }
-    .spark-area { fill: var(--accent); fill-opacity: .12; }
-    .spark-line { stroke: var(--accent); }
-    .spark-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+    .spark-area { fill: var(--brand-2); fill-opacity: .12; }
+    .spark-line { stroke: var(--brand-2); }
+    .spark-dot { fill: var(--brand-2); stroke: var(--surface); stroke-width: 1.5; }
     .chart details { margin-top: .5rem; font-size: .875rem; }
     .chart table { border-collapse: collapse; width: 100%; margin-top: .25rem; }
     .chart th, .chart td { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid var(--border); }
@@ -222,14 +225,14 @@
     }
     .tile::before {
       content: ""; position: absolute; inset: 0 0 auto; height: 3px;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2)); opacity: .85;
+      background: linear-gradient(90deg, var(--brand), var(--brown)); opacity: .85;
     }
     a.tile:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); border-color: transparent; }
     a.tile::after {
       content: "→"; position: absolute; top: 1rem; right: 1.125rem; color: var(--muted);
       transition: transform .2s, color .2s;
     }
-    a.tile:hover::after { transform: translateX(3px); color: var(--accent); }
+    a.tile:hover::after { transform: translateX(3px); color: var(--brand-2); }
     .tile .value {
       display: block; font-size: 2.25rem; font-weight: 800; line-height: 1.1; letter-spacing: -.03em;
       font-variant-numeric: tabular-nums;
