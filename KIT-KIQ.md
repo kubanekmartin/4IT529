@@ -29,7 +29,7 @@
 
 ## KIQ
 
-1. **Produkty a sortiment:** Jaké nové produkty, příchutě a formáty balení zalistovali hlavní konkurenti v českých řetězcích a e-shopech za posledních 12 měsíců a ve kterých kategoriích (rum, hořkobylinné likéry, vodka, míchané nápoje, nealko varianty apod.) sortiment nejvíc roste? **+ PATENTY?**
+1. **Produkty a sortiment:** Jaké nové produkty, příchutě a formáty balení zalistovali hlavní konkurenti v českých řetězcích a e-shopech za posledních 12 měsíců a ve kterých kategoriích (tvrdý alkohol, vysokoprocentní; neřešíme víno, pivo, nealko ani míchané nápoje) sortiment nejvíc roste? **+ PATENTY?**
 2. **Akční ceny:** Za jaké akční ceny se klíčové konkurenční produkty prodávají v řetězcích a e-shopech, jak často a v jakých termínech jdou do akce?
 3. **Komunikace:** Jakými kanály a tématy konkurenti podporují prodej v maloobchodě (letáky, e-shopy řetězců, sociální sítě, sezonní kampaně) a jak je jejich komunikace načasovaná vůči promo akcím?
 4. **Změny tržního prostředí:** Které chystané změny (spotřební daň, regulace reklamy a prodeje alkoholu, značení) ovlivní ceny a prodej lihovin v maloobchodě a jak na ně konkurenti a řetězce viditelně reagují?

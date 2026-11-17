@@ -74,7 +74,7 @@ def test_sortiment_shows_novinky_and_products_by_category(web, board):
         "Božkov Modrá",
         "Brandy a vinné destiláty",
         "Hennessy V.S",
-        "RTD",
+        "Ovocné destiláty",
     ]
     positions = [by_category.index(text) for text in order]
     assert positions == sorted(positions)

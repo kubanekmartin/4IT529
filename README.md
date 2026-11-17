@@ -12,7 +12,7 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | --- | --- |
 | `/prehled` | Přehled (na něj vede `/`): hlavní čísla s vývojem za 30 dní, grafy po KIQ s vysvětlením (bez grafů, které má Brief) a stav sběru |
 | `/brief` | aktuální Brief, `/brief/archiv` starší Briefy |
-| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle deseti kategorií, u produktu jeho akční ceny; Novinky sledovaných konkurentů v čase |
+| `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz podle devíti kategorií lihovin, u produktu jeho akční ceny; Novinky sledovaných konkurentů v čase |
 | `/akcni-ceny` | KIQ 2: cenový tlak na produkty zadavatele („Co to znamená pro vás“), statistiky a vývoj akčních cen (slevy, řetězce, kalendář akcí) a tabulka akčních cen z akcniceny.cz s kategorií a cenou za litr, filtrem a řazením podle sloupců |
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
 | `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím; témata po týdnech |
@@ -41,6 +41,12 @@ docker compose exec ozvena lihoviny zadani ozvena '{"fail": "ukázka Selhání"}
 Příkaz vypíše Zadání i odpověď (INFORM, nebo FAILURE s důvodem) a obě zprávy se objeví v logu.
 
 ## Sběrní agenti
+
+Systém sleduje jen lihoviny (tvrdý alkohol s aspoň 15 % obj., včetně likérů). Pivo, víno,
+nealko nápoje a hotové míchané nápoje (RTD) jsou mimo rozsah KIQ: sortimentní agent stránku
+RTD nestahuje a produkt pod 15 % vynechá, cenový agent nečte výpis míchaných nápojů a vynechá
+akční cenu s obsahem alkoholu pod 15 % v názvu. RTD sebrané do 17. 11. 2026 zůstávají
+v databázi, web je v Sortimentu neukazuje.
 
 Sběrný agent na Zadání stáhne zdroj, zapíše na tabuli jeden snímek (odkazy na surové stránky
 uložené na disku) a k němu nálezy, vše v jedné transakci. Odpoví INFORM jen s přehledem
@@ -75,8 +81,8 @@ začátku sledování):
 
 ### Cenový agent (KIQ 2, akcniceny.cz)
 
-Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin, likéry, míchaný
-nápoj…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
+Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin, likéry, bylinné
+a ovocné destiláty…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
 akční cena: cena, případně cena s věrnostní kartou, sleva, platnost a odkaz na leták. Objem
 a obsah alkoholu čte z názvu produktu stejně jako sortimentní agent; z nich počítá cenu za
 litr a za litr etanolu (bez známého obsahu alkoholu zůstane prázdná). LLM potřebuje jen jako
@@ -228,7 +234,7 @@ ukazuje poslední Brief, <http://127.0.0.1:8510/brief/archiv> všechny starší.
   portfolia proti nejnižší akční ceně v kategorii, Novinky podle kategorie) počítá
   agent sám z nálezů a ukládá je s Briefem jako SVG; web je vloží bez JavaScriptu. Pod každým
   grafem je tabulka s daty.
-- Portfolio zadavatele (návrh k odsouhlasení týmem) a sledovaní konkurenti jsou
+- Portfolio zadavatele (fiktivní značka Valnov, jen ke srovnání; odsouhlaseno týmem) a sledovaní konkurenti jsou
   v `src/lihoviny/zadavatel.toml`; sortimentní agent odtud bere jména konkurentů.
 
 ```sh

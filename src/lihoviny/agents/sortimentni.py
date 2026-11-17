@@ -15,8 +15,9 @@ Novinka je produkt, který se u zdroje objevil poprvé od začátku sledování:
   byl už před začátkem sledování a novinkou není (ani se štítkem prodejce). Vyprodaný
   a vrácený produkt už v tabulce je.
 
-Kategorie se řídí podkategorií u zdroje; LLM rozhoduje jen nejasné případy (dárková balení,
-likéry hořké vs. ostatní, aperitivy, slabé nápoje mimo RTD) a doplní značku, když název
+Bere jen lihoviny s aspoň 15 % obj.; RTD, nealko a slabší nápoje (medoviny, vinné aperitivy)
+vynechá. Kategorie se řídí podkategorií u zdroje; LLM rozhoduje jen nejasné případy (dárková balení,
+likéry hořké vs. ostatní, aperitivy) a doplní značku, když název
 nezačíná žádnou značkou z filtru zdroje. Výrobce u zdroje není, takže ho LLM určí jednou
 pro každou novou značku.
 """
@@ -37,6 +38,7 @@ from lihoviny.fetch import FetchResult
 from lihoviny.llm import LlmError
 from lihoviny.products import (
     CATEGORIES,
+    SPIRIT_MIN_ABV,
     Category,
     parse_abv,
     parse_volume_ml,
@@ -61,13 +63,11 @@ SOURCE_CATEGORIES: dict[int, Category] = {
     300108081: "whisky",  # Whisky, whiskey a bourbon
     300108074: "brandy",  # Brandy, koňak a armaňak
     300108076: "ovocne_destilaty",  # Ovocné pálenky, konzumní líh a jiné aromatizované lihoviny
-    RTD_SOURCE_CATEGORY: "rtd",  # Ready to drink, Hard seltzer, koktejly a příslušenství
     300123817: "ostatni",  # Sake
     300121089: "ostatni",  # Absinth, Tequila
 }
-SKIPPED_SOURCE_CATEGORIES = {300122088}  # Nealkoholické nápoje
-# Lihovina má podle nařízení (EU) 2019/787 aspoň 15 % obj.; slabší nápoj mimo RTD je nejasný.
-SPIRIT_MIN_ABV = Decimal(15)
+# Nealkoholické nápoje a RTD (Ready to drink, Hard seltzer, koktejly) jsou mimo rozsah KIQ 1.
+SKIPPED_SOURCE_CATEGORIES = {300122088, RTD_SOURCE_CATEGORY}
 SELLER_NOTE = "podle prodejce"
 
 _NEXT_DATA = re.compile(r'<script[^>]*\bid="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL)
@@ -227,8 +227,7 @@ class Sortimentni(Agent):
         answer = self.llm.ask(
             "Zařaď každý produkt do jedné kategorie a urči jeho značku.\n\n"
             f"Kategorie (kód: název):\n{categories}\n\n"
-            "Lihovina má aspoň 15 % obj. Slabší hotový míchaný nápoj s lihovinou je RTD; "
-            "slabší nápoj bez lihoviny (medovina, vinný aperitiv) je ostatni. Hořké likéry jsou "
+            "Všechny produkty jsou lihoviny s aspoň 15 % obj. Hořké likéry jsou "
             "bylinné a hořké (Becherovka, Fernet, Jägermeister), ostatní likéry ty sladké.\n\n"
             "Produkty (JSON, jeden na řádek):\n" + _json_lines(items),
             Classification,
@@ -367,10 +366,10 @@ def _page_cards(props: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _listing(card: dict[str, Any], category_id: int, category_name: str) -> Listing | None:
     """Karta jako lihovina; karta bez objemu nebo obsahu alkoholu (příslušenství, nealko
-    nápoje) lihovinou není a vrátí None."""
+    nápoje) nebo s méně než 15 % obj. (RTD v jiné podkategorii, medovina) vrátí None."""
     volume_ml = parse_volume_ml(card["textualAmount"])
     abv = parse_abv(card["name"])
-    if volume_ml is None or abv is None:
+    if volume_ml is None or abv is None or abv < SPIRIT_MIN_ABV:
         return None
     return Listing(
         source_id=card["productId"],
@@ -397,11 +396,9 @@ def _page_brands(props: dict[str, Any]) -> set[str]:
 
 def _source_category(listings: list[Listing]) -> Category | None:
     """Kategorie podle podkategorie u zdroje, nebo None, když je případ nejasný."""
-    if any(listing.source_category_id == RTD_SOURCE_CATEGORY for listing in listings):
-        return "rtd"
     for listing in listings:
         category = SOURCE_CATEGORIES.get(listing.source_category_id)
-        if category and listing.abv >= SPIRIT_MIN_ABV:
+        if category:
             return category
     return None
 

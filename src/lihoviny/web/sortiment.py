@@ -45,7 +45,8 @@ def sortiment_page(request: Request, conn: Annotated[psycopg.Connection, Depends
         ).fetchall()
     by_category: dict[str, list[Product]] = {code: [] for code in CATEGORIES}
     for product in products:
-        by_category[product.category].append(product)
+        if product.category in by_category:  # starší RTD z doby před zúžením na lihoviny ne
+            by_category[product.category].append(product)
     offers_by_product: dict[int, list[dict]] = {}
     for offer in current_offers(conn)[1]:
         if offer["product_id"] is not None:

@@ -203,10 +203,10 @@ _SYSTEM = (
 _PROMPT = """\
 Posuď článek z oborového magazínu zboziaprodej.cz pro přehled komunikace výrobců lihovin.
 
-Relevantní je článek o lihovinách (včetně likérů a RTD, tedy hotových míchaných nápojů
-s lihovinou): o jejich výrobcích, značkách, produktech, prodeji, propagaci nebo o trhu
-lihovin a alkoholu. Článek jen o pivu, víně, nealkoholických nápojích nebo o maloobchodě
-obecně relevantní není.
+Relevantní je článek o lihovinách, tedy tvrdém alkoholu s aspoň 15 % obj. (včetně likérů):
+o jejich výrobcích, značkách, produktech, prodeji, propagaci nebo o trhu lihovin a alkoholu.
+Článek jen o pivu, víně, nealkoholických nápojích, hotových míchaných nápojích (RTD) nebo
+o maloobchodě obecně relevantní není.
 
 U relevantního článku vyplň:
 - manufacturers: výrobce lihovin z článku. Sledované konkurenty piš přesně takto: \

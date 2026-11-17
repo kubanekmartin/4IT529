@@ -18,7 +18,7 @@ from lihoviny.fetch import FakeFetcher, HttpFetcher
 
 FIXTURES = Path(__file__).parent / "fixtures" / "akcniceny"
 LISTING = "https://www.akcniceny.cz/zbozi/napoje-alkoholicke/{}/"
-# Výpisy podle klíčových slov, ze kterých cenový agent bere akční ceny lihovin a RTD.
+# Výpisy podle klíčových slov, ze kterých cenový agent bere akční ceny lihovin.
 LISTINGS = [
     "tuzemak-rum",
     "vodky",
@@ -29,7 +29,6 @@ LISTINGS = [
     "likery",
     "bylinne-destilaty",
     "ovocne-destilaty",
-    "michany-napoj",
 ]
 
 
@@ -40,7 +39,6 @@ def source_routes():
         LISTING.format("tuzemak-rum") + "strana-2/": FIXTURES / "tuzemak-rum-strana-2.html",
         LISTING.format("bylinne-destilaty"): FIXTURES / "bylinne-destilaty.html",
         LISTING.format("likery"): FIXTURES / "likery.html",
-        LISTING.format("michany-napoj"): FIXTURES / "michany-napoj.html",
     }
     return routes
 
@@ -69,11 +67,11 @@ def test_zadani_puts_akcni_ceny_with_chain_validity_and_litre_prices_on_board(
     reply = bus.conversation(zadani.conversation_id)[-1]
     assert reply.kind is Kind.INFORM
     snapshot = board.snapshot(reply.content["snapshot_id"])
-    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 24, "item_count": 24}
+    assert reply.content == {"snapshot_id": snapshot.id, "new_findings": 23, "item_count": 23}
     assert (snapshot.agent, snapshot.source, snapshot.item_count) == (
         "cenovy",
         "akcniceny.cz",
-        24,
+        23,
     )
     lidl = next(
         f
@@ -123,13 +121,6 @@ def test_price_per_litre_of_ethanol_needs_known_abv(bus, board, clock, raw_dir, 
 
     cenovy.process_pending()
 
-    # RTD v plechovce: 39,90 / (0,25 l × 0,045)
-    assert litre_prices(board, "Míchaný drink 4,5% 250 ml", "Albert") == (
-        0.25,
-        4.5,
-        159.6,
-        3546.67,
-    )
     # obsah alkoholu s mezerou před procentem: 139,90 / (0,5 l × 0,35)
     assert litre_prices(board, "Božkov Tradiční 35 % 0,5l", "BILLA") == (0.5, 35.0, 279.8, 799.43)
     # obsah alkoholu v názvu není: cena za litr ano, za litr etanolu ne
@@ -322,13 +313,13 @@ def test_next_day_snapshot_keeps_the_previous_one_and_adds_only_changed_akcni_ce
     assert reply.content == {
         "snapshot_id": second_snapshot.id,
         "new_findings": 1,
-        "item_count": 24,
+        "item_count": 23,
     }
     assert board.snapshot(first_snapshot.id) == first_snapshot
     assert second_snapshot.taken_at - first_snapshot.taken_at == timedelta(days=1)
-    assert second_snapshot.item_count == first_snapshot.item_count == 24
+    assert second_snapshot.item_count == first_snapshot.item_count == 23
     assert set(second_snapshot.raw_paths).isdisjoint(first_snapshot.raw_paths)
-    assert len(board.findings(snapshot_id=first_snapshot.id)) == 24
+    assert len(board.findings(snapshot_id=first_snapshot.id)) == 23
     (changed,) = board.findings(snapshot_id=second_snapshot.id)
     assert (changed.content["product"], changed.content["chain"], changed.content["price"]) == (
         "Captain Morgan Original Spiced Gold 0,7l",
@@ -372,7 +363,7 @@ def test_source_keeps_crawl_delay_and_waits_after_429_before_trying_again(
     cenovy.process_pending()
 
     reply = bus.conversation(zadani.conversation_id)[-1]
-    assert reply.content["new_findings"] == 24
+    assert reply.content["new_findings"] == 23
     pauses = [(b - a).total_seconds() for a, b in pairwise(requested_at)]
     assert pauses[0] == 5  # Retry-After po HTTP 429
     assert min(pauses) >= 1  # Crawl-delay akcniceny.cz
@@ -425,3 +416,17 @@ def test_write_failure_midway_leaves_nothing_from_the_zadani_on_board(
     assert reply.kind is Kind.FAILURE
     assert board.snapshots(agent="cenovy") == []
     assert board.findings(kiq=2) == []
+
+
+def test_offer_below_15_percent_is_not_a_lihovina(bus, board, clock, raw_dir, make_agent):
+    """Systém sleduje jen tvrdý alkohol: míchaný drink 4,5 % se nezapíše, ani když ho zdroj
+    ukáže ve výpisu lihovin."""
+    routes = source_routes()
+    routes[LISTING.format("gin")] = FIXTURES / "michany-napoj.html"
+    cenovy = make_cenovy(make_agent, clock, raw_dir, routes)
+    send_zadani(bus)
+
+    cenovy.process_pending()
+
+    assert akcni_ceny(board, "Míchaný drink 4,5% 250 ml") == []
+    assert akcni_ceny(board, "Božkov Tradiční 35 % 0,5l")  # lihoviny dál ano
