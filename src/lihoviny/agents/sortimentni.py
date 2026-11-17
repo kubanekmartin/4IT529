@@ -148,7 +148,7 @@ class Manufacturers(BaseModel):
 
 class Sortimentni(Agent):
     name = "sortimentni"
-    role = "KIQ 1 Sortiment: produkty a Novinky z kategorie Lihoviny na rohlik.cz"
+    role = "sběrný agent KIQ 1: produkty a Novinky lihovin z rohlik.cz a alkohol.cz"
     # robots.txt rohlik.cz crawl-delay pro obecné klienty neuvádí; 5 s je ohleduplná rezerva.
     fetch_delay = 5.0
 

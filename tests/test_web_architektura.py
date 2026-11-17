@@ -122,3 +122,37 @@ def test_dotaz_becomes_new_zadani_and_the_log_is_the_live_proof(web):
 
     assert "nové Zadání" in block(html, "druh-QUERY")
     assert '<a href="/log">' in html
+
+
+# Zdroje sběrných agentů po rozšíření (PR #31–#35): (agent, jak je jmenuje karta, doména).
+COLLECTOR_SOURCES = [
+    ("sortimentni", ["Rohlík", "alkohol.cz"], ["rohlik.cz", "alkohol.cz"]),
+    ("cenovy", ["akcniceny.cz", "Kupi"], ["akcniceny.cz", "kupi.cz"]),
+    (
+        "regulatorni",
+        ["Poslanecké sněmovny", "Ministerstvo financí", "Celní správa"],
+        ["psp.cz", "mf.gov.cz", "celnisprava.gov.cz"],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "on_card", "domains"), COLLECTOR_SOURCES, ids=[c[0] for c in COLLECTOR_SOURCES]
+)
+def test_collector_role_names_its_real_sources(web, name, on_card, domains):
+    card = block(web.get("/architektura").text, f"agent-{name}")
+    role = card[card.index("<dt>Role</dt>") : card.index("<dt>Vnější zdroj</dt>")]
+
+    for source in on_card:
+        assert source in role
+    # Stejnou roli agent píše při startu do logu (stránka Log).
+    for domain in domains:
+        assert domain in AGENTS[name].role
+
+
+def test_web_speaks_of_nine_categories_not_ten(web):
+    html = web.get("/architektura").text
+
+    assert "devíti kategorií" in block(html, "agent-sortimentni")
+    for page in ["/architektura", "/prehled", "/sortiment"]:
+        assert "deset" not in web.get(page).text
