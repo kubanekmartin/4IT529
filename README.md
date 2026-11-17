@@ -13,9 +13,9 @@ přes Postgres (ADR 0001). Nálezy zapisují na sdílenou tabuli ve stejném Pos
 | `/prehled` | Přehled (na něj vede `/`): hlavní čísla s vývojem za 30 dní, grafy po KIQ s vysvětlením (bez grafů, které má Brief) a stav sběru |
 | `/brief` | aktuální Brief, `/brief/archiv` starší Briefy |
 | `/sortiment` | KIQ 1: Novinky a produkty z rohlik.cz (Novinky i z alkohol.cz) podle devíti kategorií lihovin, u produktu jeho akční ceny; Novinky sledovaných konkurentů v čase |
-| `/akcni-ceny` | KIQ 2: cenový tlak na produkty zadavatele („Co to znamená pro vás“), statistiky a vývoj akčních cen (slevy, řetězce, kalendář akcí) a tabulka akčních cen z akcniceny.cz s kategorií a cenou za litr, filtrem a řazením podle sloupců |
+| `/akcni-ceny` | KIQ 2 (akcniceny.cz a kupi.cz bez Tesca): cenový tlak na produkty zadavatele („Co to znamená pro vás“), statistiky a vývoj akčních cen (slevy, řetězce, kalendář akcí) a tabulka akčních cen z akcniceny.cz s kategorií a cenou za litr, filtrem a řazením podle sloupců |
 | `/akcni-ceny/nesparovane` | akční ceny, ke kterým párování zatím nenašlo produkt ze sortimentu |
-| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz s výrobcem, značkou, kanálem, tématem a shrnutím; témata po týdnech |
+| `/komunikace` | KIQ 3: články o lihovinách ze zboziaprodej.cz, mediar.cz a mediaguru.cz s výrobcem, značkou, kanálem, tématem a shrnutím; témata po týdnech |
 | `/regulace` | KIQ 4: nové sněmovní tisky o alkoholu s odhadem dopadu a termínem účinnosti, řazené podle data předložení nebo dopadu; tisky podle fáze projednávání |
 | `/log` | log komunikace agentů (tabulka zpráv sběrnice) po konverzacích |
 | `/behy` | běhy řídicího agenta, kalendář spolehlivosti sběru po dnech a varování při Selhání nebo prázdném snímku |
@@ -86,7 +86,16 @@ začátku sledování):
 - Vyprodaný a vrácený produkt už v tabulce je, takže Novinkou není. Dárkové balení stejného
   objemu má stejný klíč (`lihoviny.products.product_key`), je to týž produkt.
 
-### Cenový agent (KIQ 2, akcniceny.cz)
+### Cenový agent (KIQ 2, akcniceny.cz a kupi.cz)
+
+Kromě akcniceny.cz čte i kupi.cz: kategorie lihovin (rum, vodka, whisky, gin a tequila, brandy,
+pálenky, likéry) se všemi stranami výpisu, u každého produktu nabídky jednotlivých řetězců.
+Tesco se z Kupi nebere (rozhodnutí týmu). Kupi u nabídky obvykle neuvádí obsah alkoholu,
+slabé nápoje z kategorie likérů a míchaných nápojů (Aperol, spritz, plechovky…) agent pozná
+podle názvu. Cena s věrnostní kartou je u Kupi jediná cena s podmínkou (`card_label`). Rok
+platnosti Kupi neuvádí: datum víc než měsíc v minulosti je příští rok. Nabídka, kterou má
+ve stejném Zadání i akcniceny.cz (stejný řetězec, cena a konec platnosti), se nezapíše
+podruhé. Výpadek Kupi Zadání neshodí. Nález z Kupi má `source: kupi.cz`.
 
 Projde výpisy nápojů alkoholických podle klíčových slov (rum, vodka, gin, likéry, bylinné
 a ovocné destiláty…) i s dalšími stranami, s pauzou 1 s podle `Crawl-delay`. Každá nabídka řetězce je jedna
@@ -124,9 +133,18 @@ u zdroje, takže všechny akční ceny se stejným názvem patří k jednomu pro
   a dopočítá cenu za litr etanolu. Web ukáže kategorii u akční ceny, akční ceny u produktu
   na `/sortiment` a nespárované zvlášť na `/akcni-ceny/nesparovane`.
 
-### Mediální agent (KIQ 3, zboziaprodej.cz)
+### Mediální agent (KIQ 3, zboziaprodej.cz, mediar.cz, mediaguru.cz)
 
-Jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
+Čte tři zdroje: oborový magazín zboziaprodej.cz (hlavní), mediar.cz (WordPress REST API,
+posledních 50 článků, asi dva týdny) a mediaguru.cz (RSS, jen 15 nejnovějších, asi dva dny).
+Mediář a MediaGuru píšou o celém mediálním trhu, proto LLM dostane jen jejich články, ve
+kterých se objeví lihoviny (alkohol, lihovina, likér, rum, vodka, gin, značky a výrobci…);
+ostatní si agent zapíše jako viděné. Výpadek Mediáře nebo MediaGuru Zadání neshodí, jen se
+zaloguje a snímek vznikne bez něj; výpadek zboziaprodej.cz je Selhání. Nález nese `source`.
+U MediaGuru nemá článek číselné ID: agent si pamatuje otisk odkazu a když adresa obsahuje
+jméno osoby, nález odkáže jen na web zdroje.
+
+Ze zboziaprodej.cz jedním požadavkem na WordPress REST API načte posledních 30 článků i s textem (RSS by neslo
 jen 10). Článek, který ještě nebyl v žádném snímku, posoudí LLM: jestli je o lihovinách,
 a u relevantního výrobce, značky, kanál komunikace, téma a shrnutí ve dvou větách. Nález
 vznikne jen z relevantního článku; viděné články si agent pamatuje (jen jejich ID), takže

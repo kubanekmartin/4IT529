@@ -92,6 +92,7 @@ def test_zadani_puts_relevant_clanky_on_board_and_skips_the_rest(
     # Krátký odkaz s ID článku: adresa se slugem může nést jméno osoby z titulku.
     assert clanek.source_url == "https://www.zboziaprodej.cz/?p=83123"
     assert clanek.content == {
+        "source": "zboziaprodej.cz",
         "article_id": 83123,
         "published_at": "2026-10-22T07:31:41+00:00",
         "title": "Stock Plzeň-Božkov modernizuje výrobu a rozšiřuje produktovou nabídku",
@@ -298,3 +299,72 @@ def test_llm_failure_on_every_clanek_is_failure_and_board_stays_empty(
     assert reply.kind is Kind.FAILURE
     assert "refusal" in reply.content["reason"]
     assert board.snapshots(agent="medialni") == []
+
+
+MEDIAR_POSTS_URL = (
+    "https://www.mediar.cz/wp-json/wp/v2/posts?per_page=50&_fields=id,date_gmt,title,content"
+)
+MEDIAGURU_RSS_URL = "https://www.mediaguru.cz/rss/nejnovejsi"
+BECHEROVKA = STOCK_MODERNIZUJE | {
+    "people": ["Petr Vymyšlený"],
+    "title": "Nový šéf marketingu Becherovky",
+    "manufacturers": ["Jan Becher"],
+    "brands": ["Becherovka"],
+    "summary": "Jan Becher posiluje marketing Becherovky před Vánoci.",
+}
+
+
+def all_sources(**broken):
+    """Ukázky všech tří zdrojů. `mediar.json` a `rss.xml` jsou skutečné výpisy (17. 11. 2026)
+    zkrácené na pár článků; poslední položka RSS je upravená na článek o Becherovce."""
+    routes = {
+        POSTS_URL: FIXTURES / "clanky-den1.json",
+        MEDIAR_POSTS_URL: FIXTURES.parent / "mediar" / "clanky.json",
+        MEDIAGURU_RSS_URL: FIXTURES.parent / "mediaguru" / "rss.xml",
+    }
+    return routes | broken
+
+
+def test_mediar_and_mediaguru_give_llm_only_clanky_about_lihoviny(
+    bus, board, clock, raw_dir, make_agent
+):
+    # zboziaprodej: 2 články (LLM vždy), Mediář: 1 ze 2 o lihovinách (Brown-Forman),
+    # MediaGuru: 1 ze 3 (Becherovka). LLM tedy dostane 4 články, ne 7.
+    fetcher = FakeFetcher(all_sources(), raw_dir=raw_dir, clock=clock)
+    llm = FakeLlm(STOCK_MODERNIZUJE, irrelevant(), STOCK_MODERNIZUJE, BECHEROVKA)
+    medialni = make_agent(Medialni, fetcher=fetcher, llm=llm)
+    zadani = send_zadani(bus)
+
+    medialni.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    assert reply.content["item_count"] == 7
+    assert reply.content["new_findings"] == 3
+    snapshot = board.snapshot(reply.content["snapshot_id"])
+    assert snapshot.source == "zboziaprodej.cz, mediar.cz, mediaguru.cz"
+    assert len(llm.calls) == 4
+    assert "Brown-Forman" in llm.calls[2].prompt and "mediar.cz" in llm.calls[2].prompt
+    by_source = {f.content["source"]: f for f in board.findings(kiq=3)}
+    assert by_source["mediar.cz"].source_url == "https://www.mediar.cz/?p=295359"
+    # Adresa článku MediaGuru nese jméno z titulku: nález odkáže jen na web zdroje.
+    assert by_source["mediaguru.cz"].source_url == "https://www.mediaguru.cz"
+    # Články bez lihovin si agent pamatuje jako viděné: příště je nebere znovu.
+    assert len(board.article_ids(source="mediar.cz")) == 2
+    assert len(board.article_ids(source="mediaguru.cz")) == 3
+
+
+def test_outage_of_a_secondary_source_does_not_fail_the_zadani(
+    bus, board, clock, raw_dir, make_agent
+):
+    routes = all_sources(**{MEDIAGURU_RSS_URL: FetchError("503")})
+    fetcher = FakeFetcher(routes, raw_dir=raw_dir, clock=clock)
+    llm = FakeLlm(STOCK_MODERNIZUJE, irrelevant(), STOCK_MODERNIZUJE)
+    medialni = make_agent(Medialni, fetcher=fetcher, llm=llm)
+    zadani = send_zadani(bus)
+
+    medialni.process_pending()
+
+    reply = bus.conversation(zadani.conversation_id)[-1]
+    assert reply.kind is Kind.INFORM
+    assert board.snapshot(reply.content["snapshot_id"]).source == "zboziaprodej.cz, mediar.cz"
