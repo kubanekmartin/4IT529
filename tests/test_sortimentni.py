@@ -362,3 +362,56 @@ def test_listings_without_any_spirit_are_failure_not_an_empty_snapshot(
     assert reply.kind is Kind.FAILURE
     assert "žádná lihovina" in reply.content["reason"]
     assert board.snapshots(agent="sortimentni") == []
+
+
+ALKOHOL_CZ_NOVINKY = "https://www.alkohol.cz/produkty/novinky/"
+ALKOHOL_CZ_LLM = (
+    {
+        "products": [
+            {"id": "26846", "category": "ostatni", "brand": "Dolská"},
+            {"id": "26822", "category": "ostatni_likery", "brand": "Lázeňský Likér"},
+            {"id": "26821", "category": "whisky", "brand": "Skrewball"},
+            {"id": "26808", "category": "brandy", "brand": "Bache Gabrielsen"},
+        ]
+    },
+    {
+        "brands": [
+            {"brand": "Dolská", "manufacturer": None},
+            {"brand": "Lázeňský Likér", "manufacturer": None},
+            {"brand": "Skrewball", "manufacturer": None},
+            {"brand": "Bache Gabrielsen", "manufacturer": None},
+        ]
+    },
+)
+
+
+def test_alkohol_cz_novinky_are_novinky_by_its_label_even_after_baseline(
+    bus, board, clock, raw_dir, make_agent
+):
+    """Výpis Novinky z alkohol.cz (zkrácený skutečný, 17. 11. 2026): víno, pivo a papírová
+    taška vypadnou, lihoviny jsou Novinky „podle prodejce alkohol.cz“."""
+    baseline(bus, clock, raw_dir, make_agent)
+    routes = {url: FIXTURES / "den1" / f"{page}.html" for page, url in PAGES.items()}
+    routes[ALKOHOL_CZ_NOVINKY] = FIXTURES.parent / "alkohol_cz" / "novinky.html"
+    fetcher = FakeFetcher(routes, raw_dir=raw_dir, clock=clock)
+    agent = make_agent(Sortimentni, fetcher=fetcher, llm=FakeLlm(*ALKOHOL_CZ_LLM))
+
+    reply = run_zadani(bus, agent)
+
+    assert reply.kind is Kind.INFORM
+    assert reply.content["new_findings"] == 4
+    assert board.snapshot(reply.content["snapshot_id"]).source == "rohlik.cz, alkohol.cz"
+    found = novinky(board, reply.content["snapshot_id"])
+    assert ("Bache Gabrielsen Cognac VS 0,7l 40%", "podle prodejce alkohol.cz") in found
+    assert not any("Ampelos" in name or "Geuze" in name or "taška" in name for name, _ in found)
+    cognac = next(p for p in board.products() if p.brand == "Bache Gabrielsen")
+    assert (
+        cognac.first_seen_url == "https://www.alkohol.cz/produkty/bache-gabrielsen-cognac-vs-26808/"
+    )
+
+
+def test_alkohol_cz_outage_does_not_fail_the_zadani(bus, board, clock, raw_dir, make_agent):
+    reply = baseline(bus, clock, raw_dir, make_agent)  # bez ukázky alkohol.cz = výpadek
+
+    assert reply.kind is Kind.INFORM
+    assert board.snapshot(reply.content["snapshot_id"]).source == "rohlik.cz"

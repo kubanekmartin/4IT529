@@ -142,17 +142,17 @@
         <rect class="d-box" x="20" y="216" width="182" height="78" rx="6"/>
         <text class="d-name" x="32" y="240">Sortimentní agent</text>
         <text class="d-addr" x="32" y="259">sortimentni</text>
-        <text x="32" y="278">KIQ 1 · rohlik.cz</text>
+        <text x="32" y="278">KIQ 1 · rohlik, alkohol.cz</text>
 
         <rect class="d-box" x="214" y="216" width="182" height="78" rx="6"/>
         <text class="d-name" x="226" y="240">Cenový agent</text>
         <text class="d-addr" x="226" y="259">cenovy</text>
-        <text x="226" y="278">KIQ 2 · akcniceny.cz</text>
+        <text x="226" y="278">KIQ 2 · akcniceny, kupi</text>
 
         <rect class="d-box" x="20" y="306" width="182" height="78" rx="6"/>
         <text class="d-name" x="32" y="330">Mediální agent</text>
         <text class="d-addr" x="32" y="349">medialni</text>
-        <text x="32" y="368">KIQ 3 · zboziaprodej.cz</text>
+        <text x="32" y="368">KIQ 3 · zboziaprodej, mediar, mediaguru</text>
 
         <rect class="d-box" x="214" y="306" width="182" height="78" rx="6"/>
         <text class="d-name" x="226" y="330">Regulatorní agent</text>
@@ -234,7 +234,7 @@
           sledování.
         </dd>
         <dt>Vnější zdroj</dt>
-        <dd>rohlik.cz, data, která e-shop vkládá do stránky (<code>__NEXT_DATA__</code>)</dd>
+        <dd>rohlik.cz, data, která e-shop vkládá do stránky (<code>__NEXT_DATA__</code>), a výpis Novinky na alkohol.cz</dd>
         <dt>LLM</dt>
         <dd>jen nejasné kategorie a výrobce nové značky</dd>
         <dt>Výstup na webu</dt>
@@ -253,7 +253,7 @@
           litr a cenu za litr etanolu a páruje je s produkty ze sortimentu.
         </dd>
         <dt>Vnější zdroj</dt>
-        <dd>akcniceny.cz, výpisy alkoholických nápojů (pauza 1 s podle crawl-delay)</dd>
+        <dd>akcniceny.cz, výpisy alkoholických nápojů (pauza 1 s podle crawl-delay), a kupi.cz, kategorie lihovin po řetězcích bez Tesca</dd>
         <dt>LLM</dt>
         <dd>jen záloha při párování akční ceny na produkt</dd>
         <dt>Výstup na webu</dt>
@@ -272,7 +272,7 @@
           zapíše výrobce, značku, kanál, téma a shrnutí ve dvou větách. Jména osob neukládá.
         </dd>
         <dt>Vnější zdroj</dt>
-        <dd>zboziaprodej.cz (Zboží&amp;Prodej), posledních 30 článků přes WordPress REST API</dd>
+        <dd>zboziaprodej.cz (Zboží&amp;Prodej) a mediar.cz přes WordPress REST API, mediaguru.cz přes RSS; z Mediáře a MediaGuru jen články s lihovinami</dd>
         <dt>LLM</dt>
         <dd>relevance článku, výrobce, značka, kanál, téma a shrnutí</dd>
         <dt>Výstup na webu</dt>

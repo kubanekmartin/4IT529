@@ -22,7 +22,7 @@
 
 {% if snapshot %}
 <p class="muted">
-  Akční ceny platné k poslednímu snímku z akcniceny.cz
+  Akční ceny platné k poslednímu snímku z akcniceny.cz a kupi.cz
   (<time datetime="{{ snapshot.taken_at.isoformat() }}">{{ snapshot.taken_at | cas }}</time>),
   ke kterým párování nenašlo produkt ze sortimentu rohlik.cz: {{ unpaired | length }} názvů
   u zdroje z {{ offer_count }} akčních cen. Rohlík ve výpisu ukazuje jen část sortimentu, takže
