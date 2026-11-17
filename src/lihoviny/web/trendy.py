@@ -237,7 +237,7 @@ def tile_sparklines(conn: psycopg.Connection, daily_offers) -> dict[str, str]:
             median(ds) if (ds := [d for o in offers if (d := _discount(o)) is not None]) else 0
             for _, offers in recent
         ]
-        sparks["průměrná sleva"] = sparkline(discounts, "Medián slevy po dnech, posledních 30 dní")
+        sparks["medián slevy"] = sparkline(discounts, "Medián slevy po dnech, posledních 30 dní")
     if clanky:
         days = _last_days(max(clanky))
         per_day = Counter(clanky)

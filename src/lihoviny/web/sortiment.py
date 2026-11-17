@@ -1,4 +1,4 @@
-"""Stránka Sortiment (KIQ 1): Novinky konkurence a produkty podle deseti kategorií.
+"""Stránka Sortiment (KIQ 1): Novinky konkurence a produkty podle devíti kategorií.
 
 U produktu jsou jeho akční ceny platné k poslednímu snímku cenového agenta (spárované
 akční ceny, viz `lihoviny.pairing`), takže Novinka, kategorie a akční cena jsou pohromadě.

@@ -107,7 +107,7 @@ class Offer:
 
 class Cenovy(Agent):
     name = "cenovy"
-    role = "sběrný agent KIQ 2: akční ceny lihovin z akcniceny.cz"
+    role = "sběrný agent KIQ 2: akční ceny lihovin z akcniceny.cz a kupi.cz"
     fetch_delay = 1.0  # robots.txt akcniceny.cz: Crawl-delay: 1
 
     def handle_request(self, request: Message) -> dict[str, Any]:

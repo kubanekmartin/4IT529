@@ -8,6 +8,7 @@ byl, a čas dat u dlaždice to přizná (stejně jako stránka Akční ceny).
 
 from collections import Counter
 from datetime import date, datetime, timedelta
+from statistics import median
 from typing import Annotated, Any
 
 import psycopg
@@ -116,8 +117,8 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "href": "/akcni-ceny",
         },
         {
-            "value": f"{round(sum(discounts) / len(discounts))} %" if discounts else "—",
-            "label": "průměrná sleva",
+            "value": f"{round(median(discounts))} %" if discounts else "—",
+            "label": "medián slevy",
             "note": f"z {len(discounts)} akčních cen se slevou" if discounts else "bez slev",
             "href": "/akcni-ceny",
         },

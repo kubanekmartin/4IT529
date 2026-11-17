@@ -193,7 +193,10 @@ class Office:
 
 class Regulatorni(Agent):
     name = "regulatorni"
-    role = "sběrný agent KIQ 4: sněmovní tisky o alkoholu z otevřených dat Sněmovny"
+    role = (
+        "sběrný agent KIQ 4: sněmovní tisky o alkoholu z psp.cz "
+        "a úřední zprávy z mf.gov.cz a celnisprava.gov.cz"
+    )
     fetch_delay = 2.0  # robots.txt psp.cz crawl-delay neuvádí; za Zadání jsou jen dvě stažení
 
     def handle_request(self, request: Message) -> dict[str, Any]:

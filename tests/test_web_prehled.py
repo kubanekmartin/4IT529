@@ -98,7 +98,7 @@ def test_tiles_show_headline_numbers_and_link_to_detail_pages(web, collected):
     offers = tile(html, "platných akčních cen")
     assert 'href="/akcni-ceny"' in offers
     assert "řetězců" in offers
-    assert " %</span>" in tile(html, "průměrná sleva")
+    assert " %</span>" in tile(html, "medián slevy")
     assert '<span class="value">1</span>' in tile(html, "článků za 30 dní")
     tisky = tile(html, "sněmovních tisků o alkoholu")
     assert '<span class="value">4</span>' in tisky
@@ -186,7 +186,7 @@ def test_prehled_without_any_data_says_so_everywhere(web):
     html = page.text
     assert '<span class="value">0</span>' in tile(html, "sledovaných produktů")
     assert "zatím bez dat" in tile(html, "sledovaných produktů")
-    assert '<span class="value">—</span>' in tile(html, "průměrná sleva")
+    assert '<span class="value">—</span>' in tile(html, "medián slevy")
     assert html.count("Zatím bez dat") == 4
     assert "bez dat" in chart(html, "Novinky podle výrobce")
     assert "zatím žádný" in section(html, "Stav sběru")
@@ -202,3 +202,49 @@ def test_prehled_explains_what_the_tool_does_and_how_to_read_it(web):
     assert "Stock, Rudolf Jelínek, Fruko-Schulz, Jan Becher" in about
     assert "<summary>Pojmy</summary>" in about
     assert "<summary>Co nástroj nevidí</summary>" in about
+
+
+def record_offers(board, discounts):
+    """Snímek cenového agenta s akčními cenami platnými do 22. 11. 2026 a danými slevami."""
+    snapshot = board.record_snapshot(
+        agent="cenovy", source="akcniceny.cz", fetches=[], item_count=len(discounts)
+    )
+    ids = [
+        board.record_finding(
+            kiq=2,
+            agent="cenovy",
+            type="akcni_cena",
+            snapshot_id=snapshot.id,
+            source_url=f"https://www.akcniceny.cz/akce/{n}/",
+            content={
+                "product": f"Lihovina {n}",
+                "chain": "Albert",
+                "price": 199.9,
+                "discount_percent": discount,
+                "valid_until": "2026-11-22",
+            },
+        ).id
+        for n, discount in enumerate(discounts)
+    ]
+    board.record_snapshot_findings(snapshot.id, ids)
+
+
+def test_discount_tile_is_the_median_like_its_sparkline(web, board, clock):
+    # Průměr 30 %, medián 20 %: dlaždice ukazuje medián, stejně jako sparkline pod ní.
+    record_offers(board, [10, 20, 60])
+    clock.advance(days=1)
+    record_offers(board, [10, 20, 60])
+
+    html = web.get("/prehled").text
+
+    discount = tile(html, "medián slevy")
+    assert '<span class="value">20 %</span>' in discount
+    assert "Medián slevy po dnech" in discount
+    assert "průměrná sleva" not in html
+
+
+def test_prehled_uses_glossary_term_zadani_not_ukol(web):
+    html = web.get("/prehled").text
+
+    assert "úkol" not in html
+    assert "Zadání" in html
