@@ -1,4 +1,9 @@
-"""Cenový agent (KIQ 2 Akční ceny): akční ceny lihovin (aspoň 15 % obj.) z akcniceny.cz.
+"""Cenový agent (KIQ 2 Akční ceny): akční ceny lihovin (aspoň 15 % obj.) z akcniceny.cz a kupi.cz.
+
+Kupi.cz (`KUPI_LISTINGS`) doplní řetězce, které akcniceny.cz nemá nebo má méně (Lidl, Penny,
+Globus, Ratio…); Tesco se z Kupi nebere. Nabídka z Kupi, kterou akcniceny.cz ve stejném
+Zadání uvádí taky (stejný řetězec, cena a konec platnosti), se nezapíše podruhé. Výpadek Kupi
+Zadání neshodí, jen se zaloguje. Nález z Kupi má v obsahu `source: kupi.cz`.
 
 Na Zadání projde výpisy akčních cen podle klíčových slov (rum, vodka, gin, likéry…)
 i s jejich dalšími stranami. Výpis ukazuje u každého produktu nabídky jednotlivých řetězců:
@@ -21,7 +26,7 @@ import html
 import logging
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -29,7 +34,7 @@ from urllib.parse import urljoin, urlsplit
 from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.board import Finding
 from lihoviny.bus import Message
-from lihoviny.fetch import FetchResult
+from lihoviny.fetch import FetchError, FetchResult
 from lihoviny.pairing import Pairing, pair
 from lihoviny.products import SPIRIT_MIN_ABV, parse_abv, parse_volume_ml
 
@@ -37,7 +42,29 @@ log = logging.getLogger(__name__)
 
 SOURCE = "akcniceny.cz"
 BASE_URL = "https://www.akcniceny.cz"
-SOURCE_HOSTS = {"www.akcniceny.cz", "akcniceny.cz"}
+KUPI_SOURCE = "kupi.cz"
+KUPI_URL = "https://www.kupi.cz"
+SOURCE_HOSTS = {"www.akcniceny.cz", "akcniceny.cz", "www.kupi.cz", "kupi.cz"}
+# Kategorie lihovin na Kupi: (slug, kategorie výpisu jako u akcniceny.cz).
+KUPI_LISTINGS = [
+    ("rum", "tuzemák, rum"),
+    ("vodka", "vodka"),
+    ("whisky-a-bourbon", "whisky"),
+    ("gin-tequila-a-ostatni-lihoviny", "gin"),
+    ("brandy-a-konak", "brandy"),
+    ("palenky", "ovocné destiláty"),
+    ("likery-aperitivy-a-michane-napoje", "likéry"),
+]
+# Řetězce, které z Kupi nebereme (rozhodnutí týmu).
+KUPI_SKIPPED_CHAINS = {"tesco"}
+# Kupi u nabídky většinou neuvádí obsah alkoholu; slabé nápoje z kategorie likérů
+# a míchaných nápojů pozná podle názvu.
+# shortcut: seznam slov, ne obsah alkoholu; kdyby prošly další slabé nápoje, doplnit sem.
+_KUPI_NOT_SPIRIT = re.compile(
+    r"aperol|spritz|aperitiv|cuba libre|seltzer|koktejl|drink|plech|nealko|"
+    r"\bcider|\bvíno\b|prosecco|frizzante",
+    re.IGNORECASE,
+)
 LISTING_URL = BASE_URL + "/zbozi/napoje-alkoholicke/{}/"
 
 # Výpisy nápojů alkoholických podle klíčového slova: (slovo v adrese, jak ho uvádí zdroj).
@@ -94,6 +121,10 @@ class Cenovy(Agent):
                     continue
                 key = _offer_key(offer.product_url, content)
                 offers.setdefault(key, (offer.product_url, content))
+        akcniceny = {_same_offer(content) for _, content in offers.values()}
+        for product_url, content in self._read_kupi(pages):
+            if _same_offer(content) not in akcniceny:
+                offers.setdefault(_offer_key(product_url, content), (product_url, content))
         if not offers:
             raise CenovyError(f"{SOURCE}: ve výpisech není žádná akční cena (změnila se stránka?)")
 
@@ -149,6 +180,32 @@ class Cenovy(Agent):
             page_offers, next_url = _parse_listing(page)
             offers.extend(page_offers)
         return offers
+
+    def _read_kupi(self, pages: list[FetchResult]) -> list[tuple[str, dict[str, Any]]]:
+        """Akční ceny lihovin z Kupi; výpadek Kupi se jen zaloguje."""
+        found: list[tuple[str, dict[str, Any]]] = []
+        kupi_pages: list[FetchResult] = []
+        try:
+            for slug, category in KUPI_LISTINGS:
+                url = f"{KUPI_URL}/slevy/{slug}"
+                for number in range(1, MAX_PAGES + 1):
+                    page = self.fetcher.get(url if number == 1 else f"{url}?page={number}")
+                    kupi_pages.append(page)
+                    page_offers, last_page = _parse_kupi(page, slug)
+                    for offer in page_offers:
+                        content = _finding_content(offer, category) | {"source": KUPI_SOURCE}
+                        if _is_spirit(content) and not _KUPI_NOT_SPIRIT.search(offer.product):
+                            found.append((offer.product_url, content))
+                    if number >= last_page:
+                        break
+        except (FetchError, ValueError) as error:
+            log.warning("%s: zdroj vynechán (%s)", KUPI_SOURCE, error)
+            return []
+        if not found:
+            # Ani jedna lihovina ve všech kategoriích: Kupi nejspíš změnilo stránku.
+            log.warning("%s: ve výpisech není žádná akční cena lihoviny", KUPI_SOURCE)
+        pages.extend(kupi_pages)
+        return found
 
     def _own_findings(self) -> list[Finding]:
         return [
@@ -353,3 +410,84 @@ def _is_spirit(content: dict[str, Any]) -> bool:
     """
     abv = content["abv_percent"]
     return abv is None or Decimal(str(abv)) >= SPIRIT_MIN_ABV
+
+
+def _same_offer(content: dict[str, Any]) -> tuple:
+    """Táž nabídka u dvou zdrojů: řetězec (první slovo), cena a konec platnosti."""
+    chain = content["chain"].split()[0].casefold() if content["chain"] else ""
+    return chain, content["price"], content["valid_until"]
+
+
+def _parse_kupi(page: FetchResult, slug: str) -> tuple[list[Offer], int]:
+    """Nabídky ze strany výpisu Kupi a číslo poslední strany výpisu."""
+    text = page.text
+    blocks = text.split('<div class="product--wrap"')[1:]
+    offers = [offer for block in blocks for offer in _parse_kupi_product(block, page)]
+    numbers = [int(n) for n in re.findall(rf'href="/slevy/{slug}\?page=(\d+)"', text)]
+    return offers, max(numbers, default=1)
+
+
+def _parse_kupi_product(block: str, page: FetchResult) -> list[Offer]:
+    name = re.search(r"<h2>.*?<strong>([^<]+)</strong>", block, re.S)
+    url = re.search(r'href="(/sleva/[^"]+)"', block)
+    if not (name and url):
+        return []
+    title = " ".join(html.unescape(name.group(1)).split())
+    product_url = _source_link(urljoin(KUPI_URL, url.group(1))) or page.url
+    offers = []
+    for row in block.split('class="discount_row')[1:]:
+        shop = re.search(r'discounts_shop_name">\s*<a[^>]*>\s*<span>\s*([^<]+?)\s*</span>', row)
+        price = re.search(r'discount_price_value">([^<]+)<', row)
+        if not (shop and price):
+            continue
+        chain = html.unescape(shop.group(1)).split("\n")[0].strip()
+        if chain.casefold() in KUPI_SKIPPED_CHAINS:
+            continue
+        amount = re.search(r'discount_amount">([^<]*)<', row)
+        volume = html.unescape(amount.group(1)).replace("\xa0", " ").strip(" /") if amount else ""
+        club = re.search(r'discounts_club">\s*([^<]+?)\s*<', row)
+        percent = re.search(r'discount_percentage[^"]*">[^<\d]*(\d+)', row)
+        flyer = re.search(r'href="(/letak/[^"]+)"', row)
+        value = _czech_number(html.unescape(price.group(1)).replace("Kč", ""))
+        if value is None:
+            continue
+        valid_from, valid_until = _kupi_validity(row, page.fetched_at.date())
+        offers.append(
+            Offer(
+                product=f"{title} {volume.replace('.', ',')}".strip(),
+                product_url=product_url,
+                chain=chain,
+                price=value,
+                # Cena jen s kartou nebo pro členy klubu: Kupi uvádí jednu cenu a podmínku.
+                card_price=value if club else None,
+                card_label=" ".join(html.unescape(club.group(1)).split()) if club else None,
+                discount_percent=int(percent.group(1)) if percent else None,
+                valid_from=valid_from,
+                valid_until=valid_until,
+                flyer_url=_source_link(urljoin(KUPI_URL, html.unescape(flyer.group(1))))
+                if flyer
+                else None,
+            )
+        )
+    return offers
+
+
+def _kupi_validity(row: str, today: date) -> tuple[date | None, date | None]:
+    """Platnost z textu Kupi: „st 18. 11. – út 24. 11.“, „platí do neděle 3. 1.“,
+    „dnes končí“. Rok Kupi neuvádí: datum o víc než měsíc v minulosti je příští rok."""
+    block = re.search(r'discounts_validity[^"]*">(.*?)</div>\s*</div>\s*</div>', row, re.S)
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", block.group(1))).split()) if block else ""
+    if "dnes končí" in text:
+        return None, today
+    dates = [
+        _with_year(int(day), int(month), today)
+        for day, month in re.findall(r"(\d{1,2})\.\s*(\d{1,2})\.", text)
+    ]
+    if len(dates) == 2:
+        return dates[0], dates[1]
+    return None, dates[0] if dates else None
+
+
+def _with_year(day: int, month: int, today: date) -> date:
+    candidate = date(today.year, month, day)
+    return date(today.year + 1, month, day) if candidate < today - timedelta(days=31) else candidate
