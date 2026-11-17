@@ -156,3 +156,9 @@ def test_web_speaks_of_nine_categories_not_ten(web):
     assert "devíti kategorií" in block(html, "agent-sortimentni")
     for page in ["/architektura", "/prehled", "/sortiment"]:
         assert "deset" not in web.get(page).text
+
+
+def test_regulatorni_card_says_it_assesses_prints_and_office_news(web):
+    card = block(web.get("/architektura").text, "agent-regulatorni")
+
+    assert "Ke každému tisku i zprávě úřadu odhadne dopad" in " ".join(card.split())

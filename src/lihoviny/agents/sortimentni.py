@@ -40,6 +40,7 @@ from lihoviny.agent import Agent, OdpovedSberu
 from lihoviny.board import Product
 from lihoviny.bus import Message
 from lihoviny.fetch import FetchError, FetchResult
+from lihoviny.llm import LlmError
 from lihoviny.products import (
     CATEGORIES,
     SPIRIT_MIN_ABV,
@@ -173,12 +174,12 @@ class Sortimentni(Agent):
         unrecorded = [
             UnrecordedProduct(group) for key, group in in_snapshot.items() if key not in known
         ]
-        unrecorded = self._add_category_brand_manufacturer(
-            unrecorded, source_brands, list(known.values())
-        )
-
         previous = self.board.snapshots(agent=self.name)
         baseline = not previous
+        unrecorded = self._add_category_brand_manufacturer(
+            unrecorded, source_brands, list(known.values()), baseline=baseline
+        )
+
         watermark = _baseline_watermark(previous, known.values())
         new_findings = 0
         # Snímek, produkty a Novinky jedna transakce: neúplný výchozí snímek by později
@@ -218,12 +219,21 @@ class Sortimentni(Agent):
         )
 
     def _add_category_brand_manufacturer(
-        self, unrecorded: list[UnrecordedProduct], source_brands: set[str], known
+        self,
+        unrecorded: list[UnrecordedProduct],
+        source_brands: set[str],
+        known,
+        *,
+        baseline: bool,
     ) -> list[UnrecordedProduct]:
         """Doplní novým produktům kategorii, značku a výrobce; LLM jen tam, kde zdroj nestačí.
 
         Produkt, který LLM nezařadil, vynechá (zapíše do logu); Značka, které LLM neurčil
         výrobce, zůstane bez výrobce. Jedna vadná položka tak neshodí celé Zadání.
+        Selháním končí, když LLM nezařadí žádný produkt (výpadek, ne vadná položka), nebo
+        když by bez produktu z Rohlíku vznikl neúplný výchozí snímek: jeho ID u zdroje by
+        později přesáhlo výchozí stav a produkt by se stal falešnou Novinkou. U alkohol.cz
+        rozhoduje o Novince vždy štítek prodejce, jeho vynechání výchozí stav nekazí.
         """
         brands = source_brands | {product.brand for product in known}
         unclear = []
@@ -233,7 +243,15 @@ class Sortimentni(Agent):
             if product.category is None or product.brand is None:
                 unclear.append(product)
         if unclear:
-            self._classify(unclear)
+            skipped = self._classify(unclear)
+            if len(skipped) == len(unclear):
+                raise LlmError(f"LLM nezařadil žádný z {len(unclear)} nejasných produktů")
+            from_rohlik = [
+                p for p in skipped if p.oldest_listing.source_category_id != ALKOHOL_CZ_CATEGORY
+            ]
+            if baseline and from_rohlik:
+                names = ", ".join(repr(p.oldest_listing.name) for p in from_rohlik)
+                raise LlmError(f"LLM nezařadil produkty {names}, výchozí snímek by byl neúplný")
         unrecorded = [p for p in unrecorded if p.category is not None and p.brand is not None]
 
         manufacturers = {product.brand: product.manufacturer for product in known}
@@ -244,7 +262,8 @@ class Sortimentni(Agent):
             product.manufacturer = manufacturers.get(product.brand)
         return unrecorded
 
-    def _classify(self, unclear: list[UnrecordedProduct]) -> None:
+    def _classify(self, unclear: list[UnrecordedProduct]) -> list[UnrecordedProduct]:
+        """Doplní nejasným produktům kategorii a značku; vrátí ty, které LLM nezařadil."""
         items = [
             {
                 "id": str(product.oldest_listing.source_id),
@@ -267,15 +286,18 @@ class Sortimentni(Agent):
             system=_SYSTEM,
         )
         by_id = {item.id: item for item in answer.products}
+        skipped = []
         for product in unclear:
             item = by_id.get(str(product.oldest_listing.source_id))
             if item is None:
                 listing = product.oldest_listing
                 source = ALKOHOL_CZ if listing.source_category_id == ALKOHOL_CZ_CATEGORY else SOURCE
                 log.warning("%s: LLM nezařadil produkt %r, vynechán", source, listing.name)
+                skipped.append(product)
                 continue
             product.category = product.category or item.category
             product.brand = product.brand or item.brand
+        return skipped
 
     def _ask_manufacturers(self, brands: list[str]) -> dict[str, str | None]:
         answer = self.llm.ask(

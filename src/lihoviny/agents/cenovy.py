@@ -454,6 +454,13 @@ def _parse_kupi_product(block: str, page: FetchResult) -> list[Offer]:
         flyer = re.search(r'href="(/letak/[^"]+)"', row)
         value = _czech_number(html.unescape(price.group(1)).replace("Kč", ""))
         if value is None:
+            log.warning(
+                "%s: nečitelná cena %r u %s, nabídka %r vynechána",
+                KUPI_SOURCE,
+                price.group(1),
+                chain,
+                title,
+            )
             continue
         valid_from, valid_until = _kupi_validity(row, page.fetched_at.date())
         offers.append(
