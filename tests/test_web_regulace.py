@@ -93,7 +93,8 @@ def test_regulace_page_shows_party_instead_of_names_of_mps(web, collected):
 def test_regulace_page_says_so_before_first_snapshot(web):
     html = web.get("/regulace").text
 
-    assert "Regulatorní agent zatím nestáhl data Sněmovny." in html
+    assert "Regulatorní agent zatím nestáhl žádná data." in html
+    assert "nestáhl data Sněmovny" not in html
 
 
 def submitted_dates(html):
