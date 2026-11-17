@@ -29,7 +29,7 @@
 {% block content %}
 <h1>Komunikace</h1>
 <p class="muted">
-  KIQ 3: články o lihovinách z oborového magazínu zboziaprodej.cz s výrobcem, značkou, kanálem
+  KIQ 3: články o lihovinách ze zboziaprodej.cz, mediar.cz a mediaguru.cz s výrobcem, značkou, kanálem
   komunikace, tématem a shrnutím. Články bez vztahu k lihovinám agent vynechá.
   {% if last_snapshot %}
   Poslední snímek {{ last_snapshot.taken_at | cas }} ({{ last_snapshot.item_count }} článků ve výpisu).
@@ -46,6 +46,7 @@
     <h2><a href="{{ clanek.source_url }}" rel="noreferrer">{{ c.title or "Článek bez titulku" }}</a></h2>
     <div class="meta">
       <time datetime="{{ clanek.published_at.isoformat() }}">{{ clanek.published_at | datum }}</time>
+      <span>{{ c.source or "zboziaprodej.cz" }}</span>
       {% if c.manufacturers or c.brands %}
       <span>{{ c.manufacturers | join(", ") }}{% if c.manufacturers and c.brands %} · {% endif %}{{ c.brands | join(", ") }}</span>
       {% endif %}

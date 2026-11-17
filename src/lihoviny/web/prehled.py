@@ -31,7 +31,7 @@ TOP_ITEMS = 8
 COLLECTORS = [
     ("sortimentni", "KIQ 1 Sortiment", "rohlik.cz"),
     ("cenovy", "KIQ 2 Akční ceny", "akcniceny.cz"),
-    ("medialni", "KIQ 3 Komunikace", "zboziaprodej.cz"),
+    ("medialni", "KIQ 3 Komunikace", "zboziaprodej.cz, mediar.cz, mediaguru.cz"),
     ("regulatorni", "KIQ 4 Regulace", "psp.cz"),
 ]
 # Úroveň dopadu sněmovního tisku → řada v grafu; legenda je ve stejném pořadí.
@@ -166,7 +166,7 @@ def prehled_page(request: Request, conn: Annotated[psycopg.Connection, Depends(d
             "title": "KIQ 3: O čem a kde konkurence mluví",
             "href": "/komunikace",
             "taken_at": medialni_at,
-            "source": "zboziaprodej.cz",
+            "source": "zboziaprodej.cz, mediar.cz, mediaguru.cz",
             "charts": [
                 (
                     clanky_by(clanky, "topic", TOPICS, "Články podle tématu", "Téma"),
