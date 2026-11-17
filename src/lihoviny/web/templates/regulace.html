@@ -95,6 +95,35 @@
 <p>Žádný nový sněmovní tisk se zatím lihovin netýká.</p>
 {% endif %}
 
+<h2 id="zpravy-uradu">Zprávy úřadů</h2>
+<p class="muted">Tiskové zprávy Ministerstva financí a aktuality Celní správy, které se podle
+titulku mohou týkat výrobců lihovin (posouzení LLM jen z titulku).</p>
+{% if zpravy %}
+<div class="tisky">
+  {% for zprava in zpravy %}
+  {% set c = zprava.content %}
+  <article class="tisk">
+    <header>
+      <h2><a href="{{ zprava.source_url }}" rel="noopener">{{ c.title }}</a></h2>
+      <span class="title">{{ c.source }}{% if c.published_on %}, {{ c.published_on | iso_datum }}{% endif %}</span>
+    </header>
+    <div class="tags">
+      <span class="tag level level-{{ c.impact_level }}">dopad {{ c.impact_level }}</span>
+      {% for keyword in c.keywords %}<span class="tag">{{ keyword }}</span>{% endfor %}
+    </div>
+    <p class="impact">{{ c.impact }}</p>
+    <dl>
+      <dt>Účinnost (odhad)</dt>
+      <dd>{{ c.effective_date | iso_datum }} <span class="note">({{ c.effective_note }})</span></dd>
+      <dt>Zjištěno</dt><dd>{{ zprava.found_at | datum }}</dd>
+    </dl>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p>Žádná zpráva úřadů se zatím lihovin netýká.</p>
+{% endif %}
+
 <p class="source muted">
   Zdroj dat: Poslanecká sněmovna Parlamentu České republiky,
   <a href="https://www.psp.cz/sqw/hp.sqw?k=1300">otevřená data</a> (sněmovní tisky,

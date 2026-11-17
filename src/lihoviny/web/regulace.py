@@ -49,6 +49,12 @@ def regulace_page(
             ORDER BY found_at DESC, content->>'submitted_on' DESC NULLS LAST, id DESC
             """
         ).fetchall()
+        zpravy = cursor.execute(
+            """
+            SELECT source_url, content, found_at FROM findings
+            WHERE kiq = 4 AND type = 'uredni_zprava' ORDER BY found_at DESC, id DESC LIMIT 50
+            """
+        ).fetchall()
     sort = razeni if razeni in SORTS else DEFAULT_SORT
     return templates.TemplateResponse(
         request,
@@ -56,6 +62,7 @@ def regulace_page(
         {
             "snapshot": snapshot,
             "tisky": sort_tisky(tisky, sort),
+            "zpravy": zpravy,
             "sort": sort,
             "trend": tisky_pipeline([t["content"] for t in tisky]) if tisky else None,
             "sorts": {key: label for key, (label, _, _) in SORTS.items()},

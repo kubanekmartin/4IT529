@@ -139,6 +139,13 @@ která LLM v článku našel, ještě nahradí slovem „[osoba]“. Články uk
 
 ### Regulatorní agent (KIQ 4, otevřená data Sněmovny)
 
+Kromě Sněmovny čte výpis tiskových zpráv Ministerstva financí za rok
+(`mf.gov.cz/cs/ministerstvo/media/tiskove-zpravy/<rok>`) a aktuality Celní správy. Nová zpráva
+projde stejným filtrem klíčových slov v titulku jako tisky, kandidáty posoudí LLM (jen
+z titulku) a relevantní jsou nálezy `uredni_zprava` (migrace 0014 jen přidá typ). Viděné
+zprávy si agent pamatuje v tabulce `articles`. Výpadek úřadu Zadání neshodí. Stránka Regulace
+je ukazuje v sekci Zprávy úřadů.
+
 Stáhne dva archivy [otevřených dat Poslanecké sněmovny](https://www.psp.cz/sqw/hp.sqw?k=1300):
 sněmovní tisky (`tisky.zip`, asi 4 MB) a poslance s orgány (`poslanci.zip`, kvůli poslaneckým
 klubům). Zdroj je obnovuje jednou denně v noci a vždy s úplným stavem, takže agent stáhne
