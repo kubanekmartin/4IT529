@@ -20,7 +20,7 @@ from lihoviny.products import plain_text
 
 FIXTURES = Path(__file__).parent / "fixtures" / "zboziaprodej"
 POSTS_URL = (
-    "https://www.zboziaprodej.cz/wp-json/wp/v2/posts?per_page=30&_fields=id,date_gmt,title,content"
+    "https://www.zboziaprodej.cz/wp-json/wp/v2/posts?per_page=100&_fields=id,date_gmt,title,content"
 )
 
 
